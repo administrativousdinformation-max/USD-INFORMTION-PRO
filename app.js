@@ -12418,32 +12418,31 @@ function _cpActivarListenerFormador(sid) {
 }
 
 // ── Renderizar vista del FORMADOR (pantalla dividida) ──────────────────────
+let _cpFormadorCargando = false; // flag para evitar loop infinito
 function cpRenderFormador() {
     const cont = document.getElementById('chatPruebaContenido');
     if (!cont) return;
 
-    // Si no hay sesión en memoria, intentar recuperar de Firebase (recarga de página)
-    if (!_cpSesionActiva) {
-        if (window._fbCargar) {
-            window._fbCargar('usd_cp_sesion_activa').then(s => {
-                if (s && s.id) {
-                    _cpSesionActiva = s;
-                    // Recuperar mensajes de la sesión
-                    if (!_cpMensajes[s.id]) {
-                        window._fbCargar('usd_cp_mensajes_' + s.id).then(msgs => {
-                            _cpMensajes[s.id] = Array.isArray(msgs) ? msgs :
-                                (msgs && typeof msgs === 'object' ? Object.values(msgs).filter(Boolean) : []);
-                            cpRenderFormador();
-                        });
-                        return;
-                    }
+    // Si no hay sesión en memoria, intentar recuperar de Firebase UNA SOLA VEZ
+    if (!_cpSesionActiva && !_cpFormadorCargando && window._fbCargar) {
+        _cpFormadorCargando = true;
+        cont.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--textMuted);font-size:13px;">⏳ Verificando sesión activa...</div>`;
+        window._fbCargar('usd_cp_sesion_activa').then(s => {
+            _cpFormadorCargando = false;
+            if (s && s.id) {
+                _cpSesionActiva = s;
+                if (!_cpMensajes[s.id]) {
+                    window._fbCargar('usd_cp_mensajes_' + s.id).then(msgs => {
+                        _cpMensajes[s.id] = Array.isArray(msgs) ? msgs :
+                            (msgs && typeof msgs === 'object' ? Object.values(msgs).filter(Boolean) : []);
+                        cpRenderFormador();
+                    }).catch(() => cpRenderFormador());
+                    return;
                 }
-                cpRenderFormador();
-            });
-            // Mostrar loading mientras carga
-            cont.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--textMuted);font-size:13px;">⏳ Verificando sesión activa...</div>`;
-            return;
-        }
+            }
+            cpRenderFormador();
+        }).catch(() => { _cpFormadorCargando = false; cpRenderFormador(); });
+        return;
     }
 
     if (!_cpSesionActiva) {
@@ -12654,13 +12653,8 @@ function cpGuardarYCerrar() {
 
 // ── Cancelar sesión (volver sin terminar) — solo capacitador ─────────────────
 function cpCancelarSesion() {
-    // Solo vuelve a la pantalla principal del formador sin borrar la sesión activa en Firebase
-    // La sesión sigue abierta para que los candidatos puedan continuar
-    cpRenderFormador._skipFirebase = false;
-    // Forzar re-render sin resetear _cpSesionActiva
-    const cont = document.getElementById('chatPruebaContenido');
-    if (!cont) return;
-    // Simplemente re-renderiza mostrando la sesión activa
+    // Solo re-renderiza mostrando la sesión activa (no borra nada de Firebase)
+    _cpFormadorCargando = false;
     cpRenderFormador();
 }
 
