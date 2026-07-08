@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Acceso Prueba — USDINFORMATION</title>
+<style>
+    :root {
+        --bgMain: #0d0d1a;
+        --accent: #ff2d55;
+        --textMain: #ffffff;
+        --textMuted: #a0a0a0;
+        --panelBg: #161428;
+    }
+    * { box-sizing: border-box; }
+    body, html {
+        margin: 0; padding: 0; height: 100%;
+        font-family: 'Segoe UI', sans-serif;
+        background: radial-gradient(ellipse at 20% 30%, #1a0a2e 0%, #0d0d1a 45%, #090912 100%) fixed;
+        color: var(--textMain);
+    }
+    .glass-card {
+        background: var(--panelBg);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 16px;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+    }
+    /* LOGIN */
+    #loginScreen {
+        min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .login-box { width: 100%; max-width: 380px; padding: 34px 30px; text-align: center; }
+    .login-icon {
+        width: 68px; height: 68px; border-radius: 50%; margin: 0 auto 16px;
+        background: linear-gradient(135deg, rgba(255,45,85,0.35), rgba(180,0,60,0.2));
+        border: 2px solid rgba(255,45,85,0.5);
+        display: flex; align-items: center; justify-content: center; font-size: 1.8rem;
+    }
+    .login-box h2 { margin: 0 0 4px; font-size: 1.2rem; }
+    .login-box p { margin: 0 0 22px; color: var(--textMuted); font-size: 12px; }
+    .login-input {
+        width: 100%; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 10px; padding: 12px 14px; color: #fff; font-size: 14px; outline: none;
+        margin-bottom: 12px;
+    }
+    .login-btn {
+        width: 100%; background: var(--accent); color: #fff; border: none; padding: 13px;
+        border-radius: 10px; font-size: 14px; font-weight: 800; cursor: pointer;
+        box-shadow: 0 4px 16px rgba(255,45,85,0.35); transition: 0.2s;
+    }
+    .login-btn:hover { opacity: 0.88; }
+    #loginError {
+        display: none; background: rgba(231,76,60,0.15); border: 1px solid rgba(231,76,60,0.4);
+        color: #ff8a80; font-size: 12px; padding: 9px 12px; border-radius: 8px; margin-bottom: 14px;
+    }
+    /* APP */
+    #appScreen { display: none; min-height: 100vh; padding: 20px; }
+    .app-header {
+        max-width: 500px; margin: 0 auto 18px; display: flex; align-items: center;
+        justify-content: space-between; padding: 12px 18px;
+    }
+    .app-header .name { font-size: 13px; font-weight: 700; }
+    .logout-btn {
+        background: rgba(255,255,255,0.07); color: var(--textMuted); border: 1px solid rgba(255,255,255,0.12);
+        padding: 7px 14px; border-radius: 8px; font-size: 11px; font-weight: 700; cursor: pointer;
+    }
+    .logout-btn:hover { color: #fff; }
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+    <div class="glass-card login-box">
+        <div class="login-icon">🎓</div>
+        <h2>Chat de Prueba</h2>
+        <p>Ingresa con tu usuario de prueba para comenzar.</p>
+        <div id="loginError"></div>
+        <input id="inputUsuario" class="login-input" placeholder="Usuario (ej: PRUEBA.1)" autocomplete="off">
+        <input id="inputPassword" class="login-input" type="password" placeholder="Contraseña" autocomplete="off">
+        <button class="login-btn" onclick="intentarLogin()">Ingresar</button>
+    </div>
+</div>
+
+<div id="appScreen">
+    <div class="glass-card app-header">
+        <span class="name">👤 <span id="nombreUsuarioActivo"></span></span>
+        <button class="logout-btn" onclick="cerrarSesion()">Cerrar sesión</button>
+    </div>
+    <div id="chatPruebaContenido" style="max-width:500px;margin:0 auto;"></div>
+</div>
+
+<!-- ═══════ FIREBASE (misma configuración que el sistema principal) ═══════ -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, set, get, onValue, child } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey:            "AIzaSyCgC0JLbQgUbWcBykWWC-znSDskbqtCBuA",
+        authDomain:        "usd-admi.firebaseapp.com",
+        databaseURL:       "https://usd-admi-default-rtdb.firebaseio.com",
+        projectId:         "usd-admi",
+        storageBucket:     "usd-admi.firebasestorage.app",
+        messagingSenderId: "922009717158",
+        appId:             "1:922009717158:web:8e99483e1a92d0a880e767",
+    };
+
+    const _fbApp = initializeApp(firebaseConfig);
+    const _db    = getDatabase(_fbApp);
+
+    window._fbGuardar = async function(clave, datos) {
+        try { await set(ref(_db, 'sistema/' + clave), datos); }
+        catch(e) { console.warn('[RTDB] write error:', e); }
+    };
+    window._fbCargar = async function(clave) {
+        try {
+            const snap = await get(child(ref(_db), 'sistema/' + clave));
+            if (snap.exists()) return snap.val();
+        } catch(e) { console.warn('[RTDB] read error:', e); }
+        return null;
+    };
+    window._fbValToArray = function(val) {
+        if (!val) return [];
+        if (Array.isArray(val)) return val.filter(x => x != null);
+        if (typeof val === 'object') {
+            const keys = Object.keys(val).sort((a,b) => Number(a) - Number(b));
+            return keys.map(k => val[k]).filter(x => x != null);
+        }
+        return [];
+    };
+    window._fbModules = { getDatabase, ref, onValue, set, get, child };
+    window._fbReady = true;
+</script>
+
+<!-- ═══════ LÓGICA DE LA APP DE PRUEBA ═══════ -->
+<script>
+// Solo las dos cuentas de prueba, como respaldo si no hay conexión a Firebase al cargar.
+// Si Firebase responde, se usa la lista real (por si cambian las contraseñas desde el sistema principal).
+const _listaBasePrueba = [
+    { nombre: "Prueba Uno", usuario: "PRUEBA.1", password: "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92", rol: "prueba" },
+    { nombre: "Prueba Dos", usuario: "PRUEBA.2", password: "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92", rol: "prueba" },
+];
+
+let usuarios = [];
+let userLogueado = null;
+
+async function _hashConSalt(password, usuarioId) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(password + ':usd:' + usuarioId.toUpperCase()));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+async function _hashSimple(password) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(password));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function _cargarUsuarios() {
+    try {
+        const data = window._fbCargar ? await window._fbCargar('usuarios_usd') : null;
+        usuarios = data ? window._fbValToArray(data) : [..._listaBasePrueba];
+        if (!usuarios.length) usuarios = [..._listaBasePrueba];
+    } catch(e) {
+        usuarios = [..._listaBasePrueba];
+    }
+}
+
+function _mostrarErrorLogin(msg) {
+    const el = document.getElementById('loginError');
+    el.textContent = msg;
+    el.style.display = 'block';
+}
+
+async function intentarLogin() {
+    const u = (document.getElementById('inputUsuario').value || '').trim().toUpperCase();
+    const p = document.getElementById('inputPassword').value || '';
+    document.getElementById('loginError').style.display = 'none';
+    if (!u || !p) { _mostrarErrorLogin('Ingresa usuario y contraseña.'); return; }
+
+    await _cargarUsuarios();
+
+    const candidato = usuarios.find(x => String(x.usuario).trim().toUpperCase() === u);
+    if (!candidato || candidato.rol !== 'prueba') {
+        _mostrarErrorLogin('Usuario o contraseña incorrectos.');
+        return;
+    }
+
+    const pHashSalted = await _hashConSalt(p, u);
+    const pHashSimple = await _hashSimple(p);
+    const okSalted = String(candidato.password).trim() === pHashSalted;
+    const okViejo   = String(candidato.password).trim() === pHashSimple;
+    if (!okSalted && !okViejo) {
+        _mostrarErrorLogin('Usuario o contraseña incorrectos.');
+        return;
+    }
+
+    userLogueado = candidato;
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appScreen').style.display = 'block';
+    const numCandidatoHeader = String(candidato.usuario).trim().toUpperCase() === 'PRUEBA.1' ? '1' : '2';
+    document.getElementById('nombreUsuarioActivo').textContent = 'Candidato ' + numCandidatoHeader;
+    cpIniciarVista();
+}
+
+function cerrarSesion() {
+    if (window._cpListenerSesion) { try { window._cpListenerSesion(); } catch(e){} window._cpListenerSesion = null; }
+    if (_cpListenerActivo) { try { _cpListenerActivo(); } catch(e){} _cpListenerActivo = null; }
+    userLogueado = null;
+    _cpSlotPropio = null;
+    _cpSesionId = null;
+    _cpMensajesLocal = [];
+    document.getElementById('inputPassword').value = '';
+    document.getElementById('appScreen').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+}
+
+// ══════════════════════════════════════════════════════════
+// CHAT PRUEBA — LADO CANDIDATO (idéntico al del sistema principal)
+// ══════════════════════════════════════════════════════════
+let _cpSlotPropio    = null; // 'prueba1' o 'prueba2'
+let _cpSesionId      = null;
+let _cpListenerActivo = null;
+let _cpMensajesLocal = [];
+let _cpNombreLocal   = '';
+
+function cpIniciarVista() {
+    if (!userLogueado) return;
+    cpRenderCandidato();
+}
+
+function cpRenderCandidato() {
+    const cont = document.getElementById('chatPruebaContenido');
+    if (!cont) return;
+
+    if (!_cpSlotPropio) {
+        _cpSlotPropio = userLogueado.usuario === 'PRUEBA.1' ? 'prueba1' : 'prueba2';
+    }
+
+    if (window._cpListenerSesion) { try { window._cpListenerSesion(); } catch(e){} window._cpListenerSesion = null; }
+    try {
+        const { getDatabase, ref, onValue } = window._fbModules || {};
+        if (onValue && getDatabase) {
+            const db = getDatabase();
+            window._cpListenerSesion = onValue(ref(db, 'sistema/usd_cp_sesion_activa'), (snap) => {
+                const sesion = snap.exists() ? snap.val() : null;
+                _cpProcesarSesionCandidato(sesion);
+            });
+            return;
+        }
+    } catch(e) {}
+    const _pollSesion = () => {
+        if (!document.getElementById('chatPruebaContenido')) return;
+        window._fbCargar('usd_cp_sesion_activa').then(sesion => {
+            _cpProcesarSesionCandidato(sesion);
+            if (!_cpSesionId) setTimeout(_pollSesion, 4000);
+        });
+    };
+    _pollSesion();
+}
+
+function _cpProcesarSesionCandidato(sesion) {
+    const cont = document.getElementById('chatPruebaContenido');
+    if (!cont) return;
+    if (!sesion || !sesion.id) {
+        if (_cpSesionId) {
+            _cpSesionId = null;
+            _cpMensajesLocal = [];
+            if (_cpListenerActivo) { try { _cpListenerActivo(); } catch(e){} _cpListenerActivo = null; }
+            cont.innerHTML = `
+                <div style="text-align:center;padding:60px 20px;">
+                    <div style="font-size:64px;margin-bottom:16px;">✅</div>
+                    <h2 style="margin:0 0 8px;">Sesión finalizada</h2>
+                    <p style="color:var(--textMuted);font-size:13px;">El formador ha cerrado esta sesión de prueba.<br>Espera a que inicie una nueva sesión.</p>
+                </div>`;
+            return;
+        }
+        cont.innerHTML = `
+                <div style="text-align:center;padding:60px 20px;">
+                    <div style="font-size:64px;margin-bottom:16px;">⏳</div>
+                    <h2 style="margin:0 0 8px;">Esperando sesión...</h2>
+                    <p style="color:var(--textMuted);font-size:13px;">El formador aún no ha iniciado una sesión de prueba.<br>Aparecerá automáticamente cuando comience.</p>
+                </div>`;
+        return;
+    }
+    if (_cpSesionId && _cpSesionId !== sesion.id) {
+        _cpMensajesLocal = [];
+        if (_cpListenerActivo) { try { _cpListenerActivo(); } catch(e){} _cpListenerActivo = null; }
+        _cpSesionId = null;
+    }
+    if (_cpSesionId === sesion.id && document.getElementById('cpMsgBox')) return;
+
+    _cpSesionId = sesion.id;
+    const datosYa = sesion[_cpSlotPropio];
+
+    if (!datosYa?.listo) {
+        cont.innerHTML = `
+        <div style="max-width:380px;margin:40px auto;">
+            <div class="glass-card" style="padding:28px;">
+                <div style="text-align:center;margin-bottom:20px;">
+                    <div style="font-size:52px;">📋</div>
+                    <h3 style="margin:8px 0 4px;">Antes de comenzar</h3>
+                    <p style="color:var(--textMuted);font-size:12px;">Ingresa tus datos para iniciar el chat de prueba.</p>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:11px;color:var(--textMuted);display:block;margin-bottom:5px;">Nombre completo</label>
+                    <input id="cpInputNombre" placeholder="Tu nombre completo" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 12px;color:#fff;font-size:13px;outline:none;">
+                </div>
+                <div style="margin-bottom:20px;">
+                    <label style="font-size:11px;color:var(--textMuted);display:block;margin-bottom:5px;">Número de cédula</label>
+                    <input id="cpInputCedula" placeholder="Ej: 1234567890" type="text" inputmode="numeric" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 12px;color:#fff;font-size:13px;outline:none;">
+                </div>
+                <button onclick="cpRegistrarDatosCandidato()" style="width:100%;background:var(--accent);color:#fff;border:none;padding:12px;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 4px 16px rgba(255,45,85,0.35);">
+                    ✅ Iniciar Chat de Prueba
+                </button>
+            </div>
+        </div>`;
+    } else {
+        cpRenderChatCandidato(sesion);
+    }
+}
+
+function cpRegistrarDatosCandidato() {
+    const nombre = (document.getElementById('cpInputNombre')?.value || '').trim();
+    const cedula = (document.getElementById('cpInputCedula')?.value || '').trim();
+    if (!nombre || !cedula) { alert('Por favor ingresa tu nombre y cédula.'); return; }
+
+    _cpMensajesLocal = [];
+
+    window._fbCargar('usd_cp_sesion_activa').then(sesion => {
+        if (!sesion) return;
+        sesion[_cpSlotPropio] = { nombre, cedula, listo: true };
+        // Actualizar cédula en el registro del usuario de prueba (para que el formador
+        // pueda vincular la calificación). Se recarga la lista completa justo antes de
+        // guardar, para no pisar datos de otros usuarios con una copia desactualizada.
+        window._fbCargar('usuarios_usd').then(dataUsuarios => {
+            const listaCompleta = dataUsuarios ? window._fbValToArray(dataUsuarios) : usuarios;
+            const u = listaCompleta.find(x => x.usuario === userLogueado.usuario);
+            if (u) { u.cedula = cedula; u.nombre = nombre; }
+            if (window._fbGuardar) window._fbGuardar('usuarios_usd', listaCompleta);
+        });
+        if (window._fbGuardar) window._fbGuardar('usd_cp_sesion_activa', sesion);
+        cpMostrarIntroPrueba(sesion);
+    });
+}
+
+function cpMostrarIntroPrueba(sesion) {
+    const cont = document.getElementById('chatPruebaContenido');
+    if (!cont) return;
+
+    cont.innerHTML = `
+        <div style="max-width:480px;margin:24px auto;">
+            <div class="glass-card" style="padding:0;overflow:hidden;">
+                <div style="padding:20px 24px;border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(255,45,85,0.1);text-align:center;">
+                    <div style="font-size:40px;margin-bottom:8px;">📋</div>
+                    <h2 style="margin:0;font-size:16px;">Introducción a la Prueba USDINFORMATION</h2>
+                </div>
+                <div style="padding:22px 24px;max-height:55vh;overflow-y:auto;font-size:13px;line-height:1.6;color:rgba(255,255,255,0.9);">
+                    <p>¡Bienvenido(a)! 🎉 Ha llegado el momento de demostrar tus habilidades de comunicación, creatividad y capacidad para generar conversaciones naturales e interesantes. Durante esta prueba serás evaluado(a) en situaciones similares a las que encontrarás en el trabajo.</p>
+                    <p>Es importante que tengas presente que la mayor parte del público con el que interactuarás será de sexo masculino, por lo que se evaluará tu capacidad para adaptar la conversación a ese tipo de audiencia, manteniendo siempre una comunicación atractiva, natural y coherente.</p>
+
+                    <h3 style="margin:18px 0 10px;font-size:14px;color:#fff;">Criterios de evaluación</h3>
+                    <p><strong>1. Saludo llamativo (Rompehielos)</strong><br>
+                    Tu primer mensaje debe captar la atención del usuario desde el inicio. Se evaluará que el saludo sea original, atractivo y genere interés para continuar la conversación.</p>
+                    <p><strong>2. Fluidez de la conversación</strong><br>
+                    Se evaluará que cada respuesta tenga coherencia con el contexto de la conversación, manteniendo un diálogo natural, dinámico y agradable. Es importante evitar respuestas forzadas o que rompan el hilo de la interacción.</p>
+                    <p><strong>3. Creación de material</strong><br>
+                    Durante la conversación podrás enviar diferentes tipos de contenido, como imágenes o videos, siempre que sean apropiados y estén relacionados con el tema de la conversación. Se evaluará tu creatividad y la capacidad para utilizar estos recursos de forma estratégica y coherente.</p>
+
+                    <h3 style="margin:18px 0 10px;font-size:14px;color:#fff;">Calificación</h3>
+                    <p>La prueba será calificada sobre 100 puntos. La nota mínima de aprobación es de <strong>85 puntos</strong>. Una vez finalices la prueba, la persona encargada se comunicará contigo para informarte el resultado y brindarte la retroalimentación correspondiente.</p>
+
+                    <p>¡Muchos éxitos! Confía en tus habilidades, sé auténtico(a) y disfruta el proceso. Cada conversación es una oportunidad para demostrar tu talento. Da lo mejor de ti y recuerda que las grandes oportunidades comienzan con una excelente primera impresión.</p>
+                    <p style="text-align:center;font-weight:800;margin-top:18px;">¡Éxitos en tu prueba! 🚀</p>
+                </div>
+                <div style="padding:16px 24px;border-top:1px solid rgba(255,255,255,0.07);">
+                    <button onclick="cpConfirmarIntroPrueba()" style="width:100%;background:var(--accent);color:#fff;border:none;padding:13px;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 4px 16px rgba(255,45,85,0.35);">
+                        Continuar →
+                    </button>
+                </div>
+            </div>
+        </div>`;
+
+    window._cpSesionPendienteIntro = sesion;
+}
+
+function cpConfirmarIntroPrueba() {
+    const sesion = window._cpSesionPendienteIntro;
+    window._cpSesionPendienteIntro = null;
+    if (!sesion) return;
+    cpRenderChatCandidato(sesion);
+}
+
+function cpRenderChatCandidato(sesion) {
+    const cont = document.getElementById('chatPruebaContenido');
+    if (!cont || !sesion) return;
+    _cpSesionId  = sesion.id;
+    _cpNombreLocal = sesion[_cpSlotPropio]?.nombre || userLogueado.nombre;
+
+    cont.innerHTML = `
+        <div class="glass-card" style="padding:0;overflow:hidden;">
+            <div style="padding:14px 18px;border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(52,152,219,0.1);display:flex;align-items:center;gap:10px;">
+                <span style="font-size:22px;">🎓</span>
+                <div>
+                    <div style="font-size:13px;font-weight:800;">Chat de Evaluación</div>
+                    <div style="font-size:10px;color:var(--textMuted);">Hola, ${_cpNombreLocal}</div>
+                </div>
+            </div>
+            <div id="cpMsgBox" style="min-height:300px;max-height:380px;overflow-y:auto;padding:14px;">
+                <div style="text-align:center;color:rgba(255,255,255,0.2);font-size:12px;padding:30px;">Cargando mensajes...</div>
+            </div>
+            <div style="padding:10px 12px;border-top:1px solid rgba(255,255,255,0.07);display:flex;gap:8px;align-items:center;">
+                <input id="cpInputMsg" placeholder="Escribe tu respuesta..." onkeydown="if(event.key==='Enter')cpEnviarCandidato()"
+                    style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:9px;padding:9px 12px;color:#fff;font-size:13px;outline:none;">
+                <label for="cpImgCandidato" style="cursor:pointer;font-size:20px;opacity:0.7;transition:0.2s;" title="Adjuntar imagen" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">🖼️</label>
+                <input type="file" id="cpImgCandidato" accept="image/*" style="display:none;" onchange="cpAdjuntarImgCandidato(this)">
+                <button onclick="cpEnviarCandidato()" style="background:#3498db;color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:800;cursor:pointer;">➤</button>
+            </div>
+        </div>`;
+
+    _cpActivarListenerMensajes();
+}
+
+function _cpActivarListenerMensajes() {
+    if (!_cpSesionId || !window._fbCargar) return;
+    if (_cpListenerActivo) { try { _cpListenerActivo(); } catch(e){} _cpListenerActivo = null; }
+
+    try {
+        const { getDatabase, ref, onValue } = window._fbModules || {};
+        if (onValue && getDatabase) {
+            const db = getDatabase();
+            const unsubscribe = onValue(ref(db, 'sistema/usd_cp_mensajes_' + _cpSesionId), (snap) => {
+                const val = snap.exists() ? snap.val() : [];
+                _cpMensajesLocal = window._fbValToArray ? window._fbValToArray(val) : (Array.isArray(val) ? val : []);
+                const filtrados = _cpMensajesLocal.filter(m => m.canal === _cpSlotPropio || m.canal === 'todos' || m.de === _cpSlotPropio);
+                _cpRenderMensajes(filtrados);
+            });
+            _cpListenerActivo = unsubscribe;
+            return;
+        }
+    } catch(e) {}
+
+    _cpMensajesLocal = [];
+    const _pollMsgs = () => {
+        if (!_cpSesionId || document.getElementById('cpMsgBox') === null) return;
+        window._fbCargar('usd_cp_mensajes_' + _cpSesionId).then(msgs => {
+            _cpMensajesLocal = Array.isArray(msgs) ? msgs : [];
+            const filtrados = _cpMensajesLocal.filter(m => m.canal === _cpSlotPropio || m.canal === 'todos' || m.de === _cpSlotPropio);
+            _cpRenderMensajes(filtrados);
+            _cpListenerActivo = setTimeout(_pollMsgs, 3000);
+        });
+    };
+    _pollMsgs();
+}
+
+function cpEnviarCandidato() {
+    const input = document.getElementById('cpInputMsg');
+    const texto = (input?.value || '').trim();
+    if (!texto || !_cpSesionId) return;
+    input.value = '';
+    const msg = { de: _cpSlotPropio, nombreDe: _cpNombreLocal, canal: _cpSlotPropio, texto, ts: Date.now() };
+    _cpMensajesLocal.push(msg);
+    const filtrados = _cpMensajesLocal.filter(m => m.canal === _cpSlotPropio || m.canal === 'todos' || m.de === _cpSlotPropio);
+    _cpRenderMensajes(filtrados);
+    if (window._fbGuardar) window._fbGuardar('usd_cp_mensajes_' + _cpSesionId, _cpMensajesLocal);
+}
+
+function cpAdjuntarImgCandidato(input) {
+    const file = input.files[0];
+    if (!file || !_cpSesionId) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        const msg = { de: _cpSlotPropio, nombreDe: _cpNombreLocal, canal: _cpSlotPropio, texto: '📷 Imagen adjunta', img: e.target.result, ts: Date.now() };
+        _cpMensajesLocal.push(msg);
+        const filtrados = _cpMensajesLocal.filter(m => m.canal === _cpSlotPropio || m.canal === 'todos' || m.de === _cpSlotPropio);
+        _cpRenderMensajes(filtrados);
+        if (window._fbGuardar) window._fbGuardar('usd_cp_mensajes_' + _cpSesionId, _cpMensajesLocal);
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
+}
+
+function _cpRenderMensajes(filtrados) {
+    const box = document.getElementById('cpMsgBox');
+    if (!box) return;
+    box.innerHTML = filtrados.length
+        ? filtrados.map(m => {
+            const esPropio = m.de === _cpSlotPropio;
+            const imgHTML  = m.img ? `<img src="${m.img}" style="max-width:200px;border-radius:8px;display:block;margin-top:4px;">` : '';
+            return `<div style="display:flex;flex-direction:column;align-items:${esPropio?'flex-end':'flex-start'};margin-bottom:8px;">
+                <div style="background:${esPropio?'rgba(52,152,219,0.25)':'rgba(255,255,255,0.07)'};border-radius:10px;padding:9px 13px;max-width:80%;font-size:13px;">
+                    ${m.texto}${imgHTML}
+                </div>
+            </div>`;
+        }).join('')
+        : `<div style="text-align:center;color:rgba(255,255,255,0.2);font-size:12px;padding:30px;">Esperando mensajes del formador...</div>`;
+    box.scrollTop = box.scrollHeight;
+}
+
+// Permitir Enter en el formulario de login
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('inputPassword').addEventListener('keydown', e => { if (e.key === 'Enter') intentarLogin(); });
+    document.getElementById('inputUsuario').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('inputPassword').focus(); });
+});
+</script>
+</body>
+</html>
