@@ -1,0 +1,1569 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Acceso — USDINFORMATION</title>
+<style>
+    :root {
+        --bgMain: #0d0d1a;
+        --accent: #ff2d55;
+        --textMain: #ffffff;
+        --textMuted: #a0a0a0;
+        --panelBg: #161428;
+    }
+    * { box-sizing: border-box; }
+    body, html {
+        margin: 0; padding: 0; height: 100%;
+        font-family: 'Segoe UI', sans-serif;
+        background: radial-gradient(ellipse at 20% 30%, #1a0a2e 0%, #0d0d1a 45%, #090912 100%) fixed;
+        color: var(--textMain);
+    }
+    .glass-card {
+        background: var(--panelBg);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 16px;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+    }
+    /* LOGIN */
+    #loginScreen {
+        min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .login-box { width: 100%; max-width: 380px; padding: 34px 30px; text-align: center; }
+    .login-icon {
+        width: 90px; height: 90px; border-radius: 50%; margin: 0 auto 20px;
+        background: linear-gradient(135deg, rgba(255,45,85,0.35), rgba(180,0,60,0.2));
+        border: 2px solid rgba(255,45,85,0.5);
+        display: flex; align-items: center; justify-content: center; font-size: 2.4rem;
+        box-shadow: 0 0 40px rgba(255,45,85,0.4), 0 0 80px rgba(255,45,85,0.15);
+        animation: loginFloat 4s ease-in-out infinite;
+    }
+    @keyframes loginFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+    .login-logo {
+        font-size: 1.7rem; font-weight: 900; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 6px;
+        background: linear-gradient(135deg, #ff2d55, #ff6b8a, #ff2d55);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .login-sub { font-size: 10px; color: rgba(255,255,255,0.35); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 24px; }
+    .login-box h2 { margin: 0 0 4px; font-size: 1.2rem; }
+    .login-box p { margin: 0 0 22px; color: var(--textMuted); font-size: 12px; }
+    .login-input {
+        width: 100%; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 10px; padding: 12px 14px; color: #fff; font-size: 14px; outline: none;
+        margin-bottom: 12px;
+    }
+    .login-btn {
+        width: 100%; background: var(--accent); color: #fff; border: none; padding: 13px;
+        border-radius: 10px; font-size: 14px; font-weight: 800; cursor: pointer;
+        box-shadow: 0 4px 16px rgba(255,45,85,0.35); transition: 0.2s;
+    }
+    .login-btn:hover { opacity: 0.88; }
+    #loginError {
+        display: none; background: rgba(231,76,60,0.15); border: 1px solid rgba(231,76,60,0.4);
+        color: #ff8a80; font-size: 12px; padding: 9px 12px; border-radius: 8px; margin-bottom: 14px;
+    }
+    /* APP */
+    #appScreen { display: none; min-height: 100vh; padding: 20px; }
+    .app-header {
+        max-width: 500px; margin: 0 auto 18px; display: flex; align-items: center;
+        justify-content: space-between; padding: 12px 18px;
+    }
+    .app-header .name { font-size: 13px; font-weight: 700; }
+    .logout-btn {
+        background: rgba(255,255,255,0.07); color: var(--textMuted); border: 1px solid rgba(255,255,255,0.12);
+        padding: 7px 14px; border-radius: 8px; font-size: 11px; font-weight: 700; cursor: pointer;
+    }
+    .logout-btn:hover { color: #fff; }
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+    <div class="glass-card login-box">
+        <div class="login-icon">💼</div>
+        <div class="login-logo">⚡ USDINFORMATION</div>
+        <div class="login-sub">Plataforma de Gestión y Monitoreo</div>
+        <p>Ingresa con tu usuario y contraseña para comenzar.</p>
+        <div id="loginError"></div>
+        <input id="inputUsuario" class="login-input" placeholder="Usuario" autocomplete="off">
+        <input id="inputPassword" class="login-input" type="password" placeholder="Contraseña" autocomplete="off">
+        <button class="login-btn" onclick="intentarLogin()">Ingresar</button>
+    </div>
+</div>
+
+<div id="restoreScreen" style="display:none;min-height:100vh;align-items:center;justify-content:center;color:var(--textMuted);font-size:14px;">Restaurando sesión…</div>
+
+<div id="appScreen">
+    <div class="glass-card app-header">
+        <span class="name">👤 <span id="nombreUsuarioActivo"></span></span>
+        <button class="logout-btn" onclick="cerrarSesion()">Cerrar sesión</button>
+    </div>
+    <div id="chatPruebaContenido" style="max-width:500px;margin:0 auto;"></div>
+</div>
+
+<!-- ═══════ FIREBASE (misma configuración que el sistema principal) ═══════ -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, set, get, onValue, child, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+
+    const firebaseConfig = {
+        apiKey:            "AIzaSyCgC0JLbQgUbWcBykWWC-znSDskbqtCBuA",
+        authDomain:        "usd-admi.firebaseapp.com",
+        databaseURL:       "https://usd-admi-default-rtdb.firebaseio.com",
+        projectId:         "usd-admi",
+        storageBucket:     "usd-admi.firebasestorage.app",
+        messagingSenderId: "922009717158",
+        appId:             "1:922009717158:web:8e99483e1a92d0a880e767",
+    };
+
+    const _fbApp = initializeApp(firebaseConfig);
+    const _db    = getDatabase(_fbApp);
+    const _storage = getStorage(_fbApp);
+
+    window._fbGuardar = async function(clave, datos) {
+        try { await set(ref(_db, 'sistema/' + clave), datos); }
+        catch(e) { console.warn('[RTDB] write error:', e); }
+    };
+    window._fbCargar = async function(clave) {
+        try {
+            const snap = await get(child(ref(_db), 'sistema/' + clave));
+            if (snap.exists()) return snap.val();
+        } catch(e) { console.warn('[RTDB] read error:', e); }
+        return null;
+    };
+    // Sube un dataUrl a Firebase Storage (ahorra cuota de descargas de RTDB al no
+    // repetir el base64 en cada sincronización del chat de prueba)
+    window._fbSubirFoto = async function(dataUrl, path) {
+        try {
+            const [meta, b64] = dataUrl.split(',');
+            const mime = meta.match(/:(.*?);/)[1];
+            const bytes = atob(b64);
+            const arr = new Uint8Array(bytes.length);
+            for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+            const blob = new Blob([arr], { type: mime });
+            const sRef = storageRef(_storage, path);
+            await uploadBytes(sRef, blob);
+            return await getDownloadURL(sRef);
+        } catch(e) {
+            console.warn('[Storage] upload error:', e);
+            return null;
+        }
+    };
+    window._fbValToArray = function(val) {
+        if (!val) return [];
+        if (Array.isArray(val)) return val.filter(x => x != null);
+        if (typeof val === 'object') {
+            const keys = Object.keys(val).sort((a,b) => Number(a) - Number(b));
+            return keys.map(k => val[k]).filter(x => x != null);
+        }
+        return [];
+    };
+    window._fbDb = _db;
+    window._fbModules = { getDatabase, ref, onValue, set, get, child, runTransaction };
+    window._fbReady = true;
+</script>
+
+<!-- ═══════ LÓGICA DE LA APP DE PRUEBA ═══════ -->
+<script>
+// Solo las dos cuentas de prueba, como respaldo si no hay conexión a Firebase al cargar.
+// Si Firebase responde, se usa la lista real (por si cambian las contraseñas desde el sistema principal).
+const _listaBasePrueba = [
+    { nombre: "Prueba Uno", usuario: "PRUEBA.1", password: "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92", rol: "prueba" },
+    { nombre: "Prueba Dos", usuario: "PRUEBA.2", password: "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92", rol: "prueba" },
+    { nombre: "Conductor Uno", usuario: "CONDUCTOR.1", password: "85bbd300ba8f4b46443bc97dff500767e03a3cd9f0847b9e6c9a1b16f79d9ad7", rol: "conductor" },
+    { nombre: "Andrés Felipe Ausique Marín", usuario: "SELECCION.1", password: "c473e572532b053f71f606fd364e1f127f62d8462d072cd041ef1ea9cb2eeab8", rol: "seleccion" },
+    { nombre: "Yully Tatiana Diaz Diaz", usuario: "SELECCION.2", password: "645c9d4ea03e34824845b15194f73e0afb2e80748877cbc8eca30acb00666bd8", rol: "seleccion" },
+];
+
+let usuarios = [];
+let userLogueado = null;
+
+// Cargos que ingresan por este archivo: 'prueba' (candidatos) más Conductor y Selección.
+const _ROLES_PERMITIDOS = ['prueba', 'conductor', 'seleccion'];
+const _CARGO_INFO = {
+    conductor: { icono: '🚗', etiqueta: 'Conductor' },
+    seleccion: { icono: '🧑‍💼', etiqueta: 'Selección' },
+};
+
+async function _hashConSalt(password, usuarioId) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(password + ':usd:' + usuarioId.toUpperCase()));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+async function _hashSimple(password) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(password));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function _cargarUsuarios() {
+    try {
+        const data = window._fbCargar ? await window._fbCargar('usuarios_usd') : null;
+        usuarios = data ? window._fbValToArray(data) : [..._listaBasePrueba];
+        if (!usuarios.length) usuarios = [..._listaBasePrueba];
+        // Cuentas base que aún no estén en la lista de Firebase (p.ej. recién creadas): se agregan
+        _listaBasePrueba.forEach(b => { if (!usuarios.some(x => String(x.usuario).trim().toUpperCase() === b.usuario)) usuarios.push(b); });
+        // Nombres de Selección: reemplaza el nombre provisional si aún lo tienen
+        usuarios.forEach(x => { const b = _listaBasePrueba.find(z => z.usuario === String(x.usuario).trim().toUpperCase()); if (b && /^SELECCION\.[12]$/.test(b.usuario) && /^Seleccion (Uno|Dos)$/i.test(String(x.nombre||'').trim())) x.nombre = b.nombre; });
+    } catch(e) {
+        usuarios = [..._listaBasePrueba];
+    }
+}
+
+function _mostrarErrorLogin(msg) {
+    const el = document.getElementById('loginError');
+    el.textContent = msg;
+    el.style.display = 'block';
+}
+
+async function intentarLogin() {
+    const u = (document.getElementById('inputUsuario').value || '').trim().toUpperCase();
+    const p = document.getElementById('inputPassword').value || '';
+    document.getElementById('loginError').style.display = 'none';
+    if (!u || !p) { _mostrarErrorLogin('Ingresa usuario y contraseña.'); return; }
+
+    await _cargarUsuarios();
+
+    const candidato = usuarios.find(x => String(x.usuario).trim().toUpperCase() === u);
+    if (!candidato || !_ROLES_PERMITIDOS.includes(candidato.rol)) {
+        _mostrarErrorLogin('Usuario o contraseña incorrectos.');
+        return;
+    }
+
+    const pHashSalted = await _hashConSalt(p, u);
+    const pHashSimple = await _hashSimple(p);
+    const okSalted = String(candidato.password).trim() === pHashSalted;
+    const okViejo   = String(candidato.password).trim() === pHashSimple;
+    if (!okSalted && !okViejo) {
+        _mostrarErrorLogin('Usuario o contraseña incorrectos.');
+        return;
+    }
+
+    _guardarSesionTab(candidato.usuario);
+    _entrarApp(candidato);
+}
+
+// Entra a la app con un usuario ya validado (login normal o sesión restaurada tras refrescar)
+function _entrarApp(candidato) {
+    userLogueado = candidato;
+    window.userLogueado = candidato;
+    _cpReiniciarInactividad();
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appScreen').style.display = 'block';
+    if (candidato.rol === 'prueba') {
+        const numCandidatoHeader = String(candidato.usuario).trim().toUpperCase() === 'PRUEBA.1' ? '1' : '2';
+        document.getElementById('nombreUsuarioActivo').textContent = 'Candidato ' + numCandidatoHeader;
+        cpIniciarVista();
+    } else {
+        // Conductor / Selección: su propio espacio (sin acceso al chat de prueba ni al sistema principal)
+        const info = _CARGO_INFO[candidato.rol] || { icono: '👤', etiqueta: candidato.rol };
+        document.getElementById('nombreUsuarioActivo').textContent = (candidato.nombre || candidato.usuario) + ' · ' + info.etiqueta;
+        renderModuloCargo(candidato.rol);
+    }
+}
+
+
+// ══════════ SESIÓN PERSISTENTE (sobrevive a refrescar la página) ══════════
+// Se guarda solo el nombre de usuario y la hora de la última actividad en sessionStorage:
+// vive únicamente en esta pestaña (al cerrarla se pierde) y nunca se guarda la contraseña.
+const _SES_KEY = 'usd_prueba_sesion';
+function _guardarSesionTab(usuario) {
+    try { sessionStorage.setItem(_SES_KEY, JSON.stringify({ u: usuario, t: Date.now() })); } catch(e) {}
+}
+function _leerSesionTab() {
+    try {
+        const d = JSON.parse(sessionStorage.getItem(_SES_KEY) || 'null');
+        if (!d || !d.u || (Date.now() - d.t) > _CP_INACTIVIDAD_MS) { sessionStorage.removeItem(_SES_KEY); return null; }
+        return d;
+    } catch(e) { return null; }
+}
+let _sesUltimoGuardado = 0;
+function _tocarSesionTab() {   // renueva la hora de actividad (máx. 1 vez cada 5 s)
+    if (!userLogueado || Date.now() - _sesUltimoGuardado < 5000) return;
+    _sesUltimoGuardado = Date.now();
+    _guardarSesionTab(userLogueado.usuario);
+}
+async function _restaurarSesion() {
+    const d = _leerSesionTab();
+    if (!d) return;
+    const rs = document.getElementById('restoreScreen');
+    document.getElementById('loginScreen').style.display = 'none';
+    if (rs) rs.style.display = 'flex';
+    const mostrarLogin = () => { if (rs) rs.style.display = 'none'; document.getElementById('loginScreen').style.display = 'flex'; };
+    try {
+        for (let i = 0; i < 80 && !window._fbReady; i++) await new Promise(r => setTimeout(r, 100));  // espera a Firebase (máx. 8 s)
+        if (!window._fbReady) { mostrarLogin(); return; }
+        await _cargarUsuarios();
+        const cand = usuarios.find(x => String(x.usuario).trim().toUpperCase() === String(d.u).trim().toUpperCase());
+        if (!cand || !_ROLES_PERMITIDOS.includes(cand.rol)) { sessionStorage.removeItem(_SES_KEY); mostrarLogin(); return; }
+        if (rs) rs.style.display = 'none';
+        _entrarApp(cand);
+    } catch(e) { console.warn('No se pudo restaurar la sesión', e); mostrarLogin(); }
+}
+
+// ══════════ CONDUCTOR / SELECCIÓN — espacio propio (datos en Firebase, mismas claves del sistema principal) ══════════
+const _TARIFA = 5000, _VMAX = 250000;
+const _K = { asig:'usd_cond_asignaciones', lab:'usd_cond_labores', sel:'usd_sel_registros', con:'usd_contratos', acu:'usd_acuerdos_confidencialidad' };
+const _EST = [['ingresado','Ingresado','#3498db'],['revision_agencia','Revisión agencia','#f39c12'],['revision_pagina','Revisión página','#9b59b6'],['aprobado_pagina','Aprobado página','#2ecc71']];
+const _e = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const _hoy = () => new Date().toLocaleDateString('en-CA');
+const _cop = n => '$' + Number(n||0).toLocaleString('es-CO');
+const _hh = t => t ? new Date(t).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '—';
+const _uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+const _nom = u => { const x = usuarios.find(z => z.usuario === u); return x ? (x.nombre || u) : u; };
+const _leer = async k => window._fbValToArray(await window._fbCargar(k));
+async function _tx(k, fn) {   // lectura-modificación-escritura atómica (evita pisar datos de otros)
+    const { ref, runTransaction } = window._fbModules;
+    return runTransaction(ref(window._fbDb, 'sistema/' + k), cur => { const a = window._fbValToArray(cur); const r = fn(a); return r === undefined ? a : r; });
+}
+const _c = { card:'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px;margin-bottom:10px;',
+  inp:'background:rgba(255,255,255,0.08);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:10px;padding:9px 12px;font-size:13px;',
+  th:'text-align:left;padding:8px;font-size:11px;text-transform:uppercase;color:var(--textMuted);border-bottom:1px solid rgba(255,255,255,0.15);',
+  td:'padding:8px;font-size:13px;border-bottom:1px solid rgba(255,255,255,0.07);' };
+const _b = c => `background:${c||'var(--accent)'};color:#fff;border:none;padding:9px 16px;border-radius:10px;cursor:pointer;font-weight:700;font-size:13px;`;
+const _vacio = t => `<p style="color:var(--textMuted);text-align:center;padding:18px;">${t}</p>`;
+const _mes = () => (document.getElementById('cgMes') || {}).value || _hoy().slice(0,7);
+const _selMes = () => `<input type="month" id="cgMes" value="${_mes()}" onchange="cgVista(window._cgVista)" style="${_c.inp}margin-bottom:12px;">`;
+const _tabla = (cols, filas) => filas.length ? `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;"><tr>${cols.map(x=>`<th style="${_c.th}">${x}</th>`).join('')}</tr>${filas.map(f=>`<tr>${f.map(x=>`<td style="${_c.td}">${x}</td>`).join('')}</tr>`).join('')}</table></div>` : '';
+
+function renderModuloCargo(rol) {
+    const cont = document.getElementById('chatPruebaContenido'); if (!cont) return;
+    cont.style.maxWidth = '900px';
+    window._cgRol = rol;
+    const tabs = rol === 'conductor' ? [['labor','🚗 Ingreso labor'],['nomina','💵 Nómina'],['datos','📄 Datos personales']]
+                                      : [['ingreso','📝 Ingreso'],['nomina','💵 Nómina'],['datos','📄 Datos personales']];
+    cont.innerHTML = `<div id="cgTabs" style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0;">${tabs.map(t=>`<button id="cgT_${t[0]}" onclick="cgVista('${t[0]}')" style="${_b('rgba(255,255,255,0.08)')}">${t[1]}</button>`).join('')}</div><div id="cgCuerpo" class="glass-card" style="padding:18px;"></div>`;
+    cgVista(tabs[0][0]);
+}
+async function cgVista(v) {
+    window._cgVista = v;
+    document.querySelectorAll('#cgTabs button').forEach(b => b.style.background = b.id === 'cgT_' + v ? 'var(--accent)' : 'rgba(255,255,255,0.08)');
+    const cu = document.getElementById('cgCuerpo'); cu.innerHTML = _vacio('Cargando…');
+    try {
+        const r = { labor:cgLabor, nomina:(window._cgRol==='conductor'?cgNomCond:cgNomSel), ingreso:cgIngreso, datos:cgDatos }[v];
+        cu.innerHTML = await r();
+    } catch(e) { console.warn(e); cu.innerHTML = _vacio('No se pudo cargar. Revisa tu conexión e intenta de nuevo.'); }
+}
+
+/* ── Conductor: Ingreso labor ── */
+async function cgLabor() {
+    const yo = userLogueado.usuario, f = _hoy();
+    const [asig, labs] = await Promise.all([_leer(_K.asig), _leer(_K.lab)]);
+    const hoy = asig.filter(a => a.fecha === f && a.conductor === yo && (a.personas||[]).length);
+    let h = `<h3 style="margin:0 0 10px;">Labores de hoy (${f})</h3>`;
+    if (!hoy.length) h += _vacio('🚫 Aún no tienes personas asignadas hoy. El supervisor o el administrador deben asignarlas antes de que puedas iniciar una labor.');
+    hoy.forEach(a => {
+        const l = labs.find(x => x.asigId === a.id), n = a.personas.length;
+        const est = !l ? ['Pendiente','#f39c12'] : l.fin ? ['Finalizada','#2ecc71'] : ['En curso','#3498db'];
+        h += `<div style="${_c.card}display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center;"><div><b>👥 ${n} persona(s)</b> · ${_cop(n*_TARIFA)}<br><span style="font-size:12px;color:var(--textMuted);">${a.personas.map(_nom).map(_e).join(', ')}</span>${l?`<br><span style="font-size:12px;">Inicio: ${_hh(l.inicio)} · Fin: ${_hh(l.fin)}</span>`:''}</div>
+          <div><span style="color:${est[1]};font-weight:800;margin-right:10px;">${est[0]}</span>${!l?`<button style="${_b('#27ae60')}" onclick="cgIniciar('${a.id}')">▶ Inicio de labor</button>`:''}${l&&!l.fin?`<button style="${_b('#e74c3c')}" onclick="cgFin('${l.id}')">■ Fin de labor</button>`:''}</div></div>`;
+    });
+    const mis = labs.filter(l => l.conductor === yo).sort((a,b) => b.inicio - a.inicio);
+    h += '<h3 style="margin:20px 0 8px;">Histórico de labores</h3>' + (_tabla(['Fecha','Personas','Inicio','Fin','Valor'], mis.map(l => [_e(l.fecha), l.personas, _hh(l.inicio), l.fin ? _hh(l.fin) : 'En curso', l.fin ? _cop(l.valor) : '—'])) || _vacio('Sin labores registradas.'));
+    return h;
+}
+async function cgIniciar(aid) {
+    const yo = userLogueado.usuario; let msg = '';
+    const asig = (await _leer(_K.asig)).find(x => x.id === aid);
+    if (!asig || asig.conductor !== yo || !(asig.personas||[]).length) { alert('No hay personas asignadas: no puedes iniciar la labor.'); return; }
+    await _tx(_K.lab, a => { if (a.some(l => l.asigId === aid)) { msg = 'Esta labor ya fue iniciada.'; return; }
+        a.push({ id:_uid(), asigId:aid, conductor:yo, fecha:asig.fecha, personas:asig.personas.length, valor:asig.personas.length*_TARIFA, inicio:Date.now(), fin:null }); return a; });
+    if (msg) alert(msg); cgVista('labor');
+}
+async function cgFin(id) {
+    if (!confirm('¿Finalizar la labor?')) return;
+    await _tx(_K.lab, a => { const l = a.find(x => x.id === id); if (l && l.conductor === userLogueado.usuario && !l.fin) { l.fin = Date.now(); return a; } });
+    cgVista('labor');
+}
+async function cgNomCond() {
+    const yo = userLogueado.usuario, m = _mes();
+    const ls = (await _leer(_K.lab)).filter(l => l.conductor === yo && l.fin && String(l.fecha).slice(0,7) === m).sort((a,b) => a.inicio - b.inicio);
+    const tp = ls.reduce((s,l) => s + l.personas, 0), tv = ls.reduce((s,l) => s + l.valor, 0);
+    return `${_selMes()} <span style="font-size:12px;color:var(--textMuted);">Tarifa: ${_cop(_TARIFA)} por persona trasladada</span>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0;"><div style="${_c.card}flex:1;min-width:130px;">Tareas<br><b style="font-size:22px;">${ls.length}</b></div><div style="${_c.card}flex:1;min-width:130px;">Personas<br><b style="font-size:22px;">${tp}</b></div><div style="${_c.card}flex:1;min-width:130px;">Total a pagar<br><b style="font-size:22px;color:#2ecc71;">${_cop(tv)}</b></div></div>`
+      + (_tabla(['Fecha','Personas','Valor'], ls.map(l => [_e(l.fecha), l.personas, _cop(l.valor)])) || _vacio('Sin labores finalizadas en este mes.'));
+}
+
+/* ── Selección ── */
+const _badge = s => { const x = _EST.find(z => z[0] === s) || _EST[0]; return `<span style="background:${x[2]}22;color:${x[2]};border:1px solid ${x[2]};padding:2px 10px;border-radius:20px;font-size:11px;font-weight:800;">${x[1]}</span>`; };
+async function cgIngreso() {
+    const mis = (await _leer(_K.sel)).filter(r => r.creadoPor === userLogueado.usuario).sort((a,b) => b.ts - a.ts);
+    return `<div style="${_c.card}"><h3 style="margin:0 0 10px;">Nuevo ingreso</h3><div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <input id="cgModelo" placeholder="Nombre de la modelo" style="${_c.inp}flex:1;min-width:170px;"><input id="cgCedula" placeholder="Cédula" inputmode="numeric" style="${_c.inp}flex:1;min-width:130px;">
+      <input id="cgValor" type="number" min="1" max="${_VMAX}" placeholder="Valor (máx. ${_cop(_VMAX)})" style="${_c.inp}flex:1;min-width:130px;"><button style="${_b('#27ae60')}" onclick="cgGuardarSel()">➕ Ingresar</button></div></div>
+      <h3 style="margin:16px 0 8px;">Mis ingresos</h3>` + (_tabla(['Fecha','Modelo','Cédula','Valor','Estado'], mis.map(r => [_e(r.fecha), _e(r.modelo), _e(r.cedula), _cop(r.valor), _badge(r.estado)])) || _vacio('Aún no has ingresado modelos.'));
+}
+async function cgGuardarSel() {
+    const m = document.getElementById('cgModelo').value.trim(), ce = document.getElementById('cgCedula').value.replace(/\D/g,''), v = Number(document.getElementById('cgValor').value);
+    if (!m || ce.length < 5) { alert('Escribe el nombre y una cédula válida.'); return; }
+    if (!(v > 0) || v > _VMAX) { alert('El valor debe ser mayor a 0 y máximo ' + _cop(_VMAX) + '.'); return; }
+    await _tx(_K.sel, a => { a.push({ id:_uid(), creadoPor:userLogueado.usuario, fecha:_hoy(), modelo:m, cedula:ce, valor:Math.round(v), estado:'ingresado', hist:[{estado:'ingresado', por:userLogueado.usuario, ts:Date.now()}], ts:Date.now() }); return a; });
+    cgVista('ingreso');
+}
+async function cgNomSel() {
+    const m = _mes(), ls = (await _leer(_K.sel)).filter(r => r.creadoPor === userLogueado.usuario && r.estado === 'aprobado_pagina' && String(r.cierre || r.fecha).slice(0,7) === m);
+    return `${_selMes()}<div style="${_c.card}">Total a pagar del mes<br><b style="font-size:24px;color:#2ecc71;">${_cop(ls.reduce((s,r) => s + r.valor, 0))}</b><br><span style="font-size:12px;color:var(--textMuted);">${ls.length} modelo(s) aprobadas en página</span></div>`
+      + (_tabla(['Cierre','Modelo','Valor'], ls.map(r => [_e(r.cierre || r.fecha), _e(r.modelo), _cop(r.valor)])) || _vacio('Aún no hay modelos aprobadas este mes.'));
+}
+
+/* ── Datos personales: contrato y acuerdo de confidencialidad ── */
+async function cgDatos() {
+    await cgPrepararDocs();
+    const yo = userLogueado.usuario, rol = userLogueado.rol, info = _CARGO_INFO[rol] || { icono:'👤', etiqueta:rol };
+    const hv = (JSON.parse(localStorage.getItem('hojas_vida_usd')||'{}')||{})[yo] || {};
+    const con = _contratoDeUsuario(yo), acu = _acuerdoDeUsuario(yo);
+    const firmado = r => r && (r.estado === 'aceptado' || r.firmaFisica);
+    let ced = ''; try { ced = await _usdCedula(yo); } catch(e) {}
+    if (ced === '—') ced = '';
+    const ac = 'var(--accent)';
+    const dato = (t, v, col) => `<div style="background:rgba(255,255,255,0.03);padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,0.07);"><div style="font-size:10px;color:${col||ac};text-transform:uppercase;font-weight:800;letter-spacing:1px;margin-bottom:6px;">${t}</div><div style="font-size:14px;font-weight:700;color:#fff;word-break:break-word;">${_e(v)}</div></div>`;
+    const docCard = (rgb, ico, tit, pend, fn, grad, txt) => `<div style="background:linear-gradient(135deg,rgba(${rgb},0.15),rgba(${rgb},0.05));border:1px solid rgba(${rgb},0.35);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:10px;position:relative;">${pend?`<div style="position:absolute;top:-8px;right:-8px;background:rgb(${rgb});color:#fff;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:900;">1</div>`:''}<div style="display:flex;align-items:center;gap:10px;"><div style="width:40px;height:40px;border-radius:10px;background:rgba(${rgb},0.25);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">${ico}</div><div><div style="font-size:13px;font-weight:800;color:#fff;">${tit}</div><div style="font-size:10px;color:rgba(255,255,255,0.55);margin-top:2px;">${pend?'Pendiente por firmar':'Documento firmado'}</div></div></div><button onclick="${fn}('${yo}')" style="width:100%;padding:10px;border-radius:10px;border:none;cursor:pointer;background:${grad};color:#fff;font-weight:800;font-size:12px;">${txt}</button></div>`;
+    // Desprendibles de nómina (labores finalizadas / modelos aprobadas), agrupados por mes
+    const its = rol === 'conductor'
+        ? (await _leer(_K.lab)).filter(l => l.conductor === yo && l.fin).map(l => ({ mes:String(l.fecha).slice(0,7), fecha:l.fecha, det:l.personas+' persona(s) × '+_cop(_TARIFA), valor:l.valor }))
+        : (await _leer(_K.sel)).filter(r => r.creadoPor === yo && r.estado === 'aprobado_pagina').map(r => ({ mes:String(r.cierre||r.fecha).slice(0,7), fecha:r.cierre||r.fecha, det:'Modelo: '+r.modelo, valor:r.valor }));
+    window._cgDesp = its;
+    const meses = [...new Set(its.map(i => i.mes))].sort().reverse();
+    const despHTML = meses.length ? meses.map(m => `<button onclick="cgVerDesp('${m}')" style="display:flex;justify-content:space-between;align-items:center;width:100%;background:rgba(241,196,15,0.1);border:1px solid rgba(241,196,15,0.35);border-radius:10px;padding:12px 14px;color:#fff;cursor:pointer;font-size:12px;font-weight:800;margin-top:8px;"><span>📅 ${_cgMesTxt(m)}</span><span style="color:#f1c40f;">${_cop(its.filter(i=>i.mes===m).reduce((s,i)=>s+i.valor,0))}</span></button>`).join('') : '<div style="font-size:11px;color:rgba(255,255,255,0.5);margin-top:6px;">Aún no tienes pagos registrados.</div>';
+    const sec = (ico, t) => `<div style="display:flex;align-items:center;gap:8px;margin:20px 0 14px;padding-bottom:8px;border-bottom:2px solid rgba(255,45,85,0.3);"><span style="font-size:16px;">${ico}</span><span style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:${ac};">${t}</span></div>`;
+    return `<div style="background:linear-gradient(135deg,rgba(255,45,85,0.1),rgba(255,45,85,0.22));border-bottom:3px solid ${ac};padding:22px 24px;border-radius:14px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <div style="width:80px;height:80px;border-radius:50%;border:3px solid ${ac};display:flex;align-items:center;justify-content:center;font-size:2.2rem;background:rgba(255,255,255,0.05);flex-shrink:0;">${info.icono}</div>
+        <div style="flex:1;min-width:0;"><div style="font-size:20px;font-weight:900;margin-bottom:6px;">${_e(_usdNombrePropio(userLogueado.nombre || yo))}</div>
+        <span style="background:rgba(255,45,85,0.18);color:${ac};border:1px solid rgba(255,45,85,0.4);border-radius:10px;padding:3px 12px;font-size:11px;font-weight:800;text-transform:uppercase;">${info.icono} ${info.etiqueta}</span></div>
+        <div style="text-align:center;flex-shrink:0;"><div style="font-size:28px;font-weight:900;color:${ac};line-height:1;">USD</div><div style="font-size:9px;color:var(--textMuted);letter-spacing:1px;">INFORMATION</div></div></div>
+        ${sec('📋','Información del Perfil')}
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;">
+            ${dato('🪪 ID de Usuario', yo)}${ced ? dato('🆔 Cédula', ced) : ''}${dato('💼 Cargo', hv.cargo && !_esValorLegadoIlegible(hv.cargo) ? hv.cargo : info.etiqueta)}${dato('🏢 Empresa','USDINFORMATION')}${dato('✅ Estado', hv.estado || 'Activo', '#27ae60')}${dato('📍 Ubicación', hv.ciudad || 'Sede Principal')}${dato('📅 Fecha de Ingreso', _usdFechaIngreso(yo))}
+        </div>
+        ${sec('📄','Documentos Laborales')}
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;">
+            ${docCard('46,204,113','📃','Contrato de Prestación de Servicios', !firmado(con), '_usdVerContrato', 'linear-gradient(135deg,#2ecc71,#27ae60)', '📄 Ver contrato')}
+            ${docCard('52,152,219','🔒','Acuerdo de Confidencialidad y No Divulgación', !firmado(acu), '_usdVerAcuerdoConfidencialidad', 'linear-gradient(135deg,#3498db,#2874a6)', '📄 Ver acuerdo')}
+            <div style="background:linear-gradient(135deg,rgba(241,196,15,0.12),rgba(241,196,15,0.04));border:1px solid rgba(241,196,15,0.3);border-radius:16px;padding:18px;"><div style="display:flex;align-items:center;gap:10px;"><div style="width:40px;height:40px;border-radius:10px;background:rgba(241,196,15,0.2);display:flex;align-items:center;justify-content:center;font-size:20px;">💵</div><div><div style="font-size:13px;font-weight:800;color:#fff;">Desprendibles de Nómina</div><div style="font-size:10px;color:rgba(255,255,255,0.5);margin-top:2px;">Historial mensual de pagos</div></div></div>${despHTML}</div>
+        </div>`;
+}
+const _cgMesTxt = m => ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][Number(m.slice(5,7))-1] + ' ' + m.slice(0,4);
+async function cgVerDesp(mes) {
+    const its = (window._cgDesp||[]).filter(i => i.mes === mes).sort((a,b) => String(a.fecha).localeCompare(String(b.fecha))), tot = its.reduce((s,i) => s + i.valor, 0);
+    let ced = ''; try { ced = await _usdCedula(userLogueado.usuario); } catch(e) {}
+    const cargo = userLogueado.rol === 'conductor' ? 'CONDUCTOR' : 'SELECCIÓN';
+    const doc = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Desprendible de Nómina</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Times New Roman',serif;color:#1a1a2e;font-size:13px}.p{max-width:720px;margin:0 auto;padding:40px 48px}h1{font-size:20px;margin-bottom:2px}.sub{color:#777;font-size:11px;margin-bottom:22px}.box{display:flex;gap:24px;flex-wrap:wrap;border:1px solid #ddd;border-radius:8px;padding:12px 16px;margin-bottom:18px}.box div{flex:1;min-width:140px}.l{font-size:9px;text-transform:uppercase;color:#888}table{width:100%;border-collapse:collapse}th{text-align:left;background:#f3f3f7;padding:8px;font-size:11px}td{padding:8px;border-bottom:1px solid #eee}.t{text-align:right;font-size:16px;font-weight:bold;margin-top:16px}</style></head><body><div class="p"><h1>USDINFORMATION</h1><div class="sub">Desprendible de Nómina — ${_cgMesTxt(mes)}</div>
+<div class="box"><div><div class="l">Nombre</div>${_e(_usdNombrePropio(userLogueado.nombre))}</div><div><div class="l">Documento</div>${_e(ced||'—')}</div><div><div class="l">Cargo</div>${cargo}</div></div>
+<table><tr><th>Fecha</th><th>Concepto</th><th style="text-align:right">Valor</th></tr>${its.map(i=>`<tr><td>${_e(i.fecha)}</td><td>${_e(i.det)}</td><td style="text-align:right">${_cop(i.valor)}</td></tr>`).join('')}</table>
+<div class="t">Total a pagar: ${_cop(tot)}</div></div></body></html>`;
+    _usdAbrirPDF(doc, 'Desprendible ' + _cgMesTxt(mes));
+}
+
+const _FIRMA_BRANDON_B64 = "data:image/png;base64,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";
+const _USD_REP_NOMBRE = 'Brandon Steven Castro Cifuentes';
+const _AES_KEY_RAW = 'usd-admi-secure-key-2024-v1!!!!!';
+let _aesKey = null;
+const _USD_REPRESENTANTES = ['BRANDON.CASTRO', 'DILAN.CASTRO'];
+function _usdFechaLarga(d) {
+    if (!d) d = new Date();
+    const dd   = String(d.getDate()).padStart(2,'0');
+    const mm   = String(d.getMonth()+1).padStart(2,'0');
+    const aaaa = d.getFullYear();
+    return `${dd}/${mm}/${aaaa}`;
+}
+
+function _usdFechaIngreso(usuario) {
+    const hv = (JSON.parse(localStorage.getItem('hojas_vida_usd')||'{}') || {})[usuario] || {};
+    const _convertir = (val) => {
+        if (!val) return null;
+        const s = String(val).trim();
+        // Número serial de Excel (ej: 46116)
+        if (/^\d{4,5}$/.test(s)) {
+            const d = new Date(Math.round((parseFloat(s) - 25569) * 86400 * 1000));
+            const dd = String(d.getUTCDate()).padStart(2,'0');
+            const mm = String(d.getUTCMonth()+1).padStart(2,'0');
+            return `${dd}/${mm}/${d.getUTCFullYear()}`;
+        }
+        // Formato ISO yyyy-mm-dd
+        if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+            const [a,m,d2] = s.split('-');
+            return `${d2.substring(0,2)}/${m}/${a}`;
+        }
+        // Ya tiene formato legible — devolver tal cual
+        return s;
+    };
+    if (hv.fechaIngreso && !_esValorLegadoIlegible(hv.fechaIngreso)) {
+        const r = _convertir(hv.fechaIngreso);
+        return r || hv.fechaIngreso.toUpperCase();
+    }
+    try {
+        const nom = JSON.parse(localStorage.getItem('datos_nomina_usd')||'[]');
+        const row = nom.find(r => (r.login||r.usuario||'').toLowerCase().trim() === (usuario||'').toLowerCase().trim());
+        if (row && (row.fecha_ingreso||row.fecha_de_ingreso)) {
+            const r = _convertir(row.fecha_ingreso||row.fecha_de_ingreso);
+            return r || String(row.fecha_ingreso||row.fecha_de_ingreso).toUpperCase();
+        }
+    } catch(e) {}
+    return '01/01/2025';
+}
+
+function _usdNombrePropio(s) {
+    if (typeof aNombrePropio === 'function') return aNombrePropio(s);
+    return (s||'').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function _pareceLoginNoCedula(valor, usuario) {
+    if (!valor || !usuario) return false;
+    const norm = s => (s||'').toString().toLowerCase().replace(/[^a-z0-9]/g,'');
+    return norm(valor) === norm(usuario);
+}
+
+async function _usdCedula(usuario) {
+    const hv = (JSON.parse(localStorage.getItem('hojas_vida_usd')||'{}') || {})[usuario] || {};
+    const _hvCedRaw = (hv.cedula && hv.cedula.trim()) ? hv.cedula.trim() : (hv.documento && hv.documento.trim() ? hv.documento.trim() : '');
+    if (_hvCedRaw) {
+        // La cédula guardada en la hoja de vida está encriptada (ENC:...) por seguridad.
+        // Si el descifrado falla (p.ej. quedó guardada con un formato de cifrado antiguo
+        // ya no compatible), NO se debe devolver el texto cifrado: se sigue buscando
+        // la cédula real más abajo (Excel de nómina / usuarios).
+        const _cedDec = await _desencriptar(_hvCedRaw);
+        if (_cedDec && _cedDec.trim() && !_pareceLoginNoCedula(_cedDec, usuario)) return _cedDec.trim();
+    }
+    // Buscar en nómina como fallback — buscar PRIMERO por login exacto
+    try {
+        const nom = JSON.parse(localStorage.getItem('datos_nomina_usd')||'[]');
+        const _n = s => (s||'').toString().toLowerCase().trim()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+        const uLog = _n(usuario);
+        // 1) Match por login exacto
+        let row = nom.find(r => _n(r.login||r.usuario||'') === uLog);
+        // 2) Match por login con formato nombre.apellido
+        if (!row) {
+            const usrs0 = JSON.parse(localStorage.getItem('usuarios_usd')||'[]');
+            const uObj0 = usrs0.find(x => _n(x.usuario||'') === uLog);
+            if (uObj0) {
+                const uNomLogin = _n(uObj0.nombre||'').replace(/\s+/g,'.');
+                row = nom.find(r => _n(r.login||r.usuario||'') === uNomLogin);
+            }
+        }
+        // 3) Match por nombre si no encontró por login — exige coincidencia de
+        // TODAS las palabras del nombre (no solo 2), igual que en _usdFilasNomina,
+        // para que coordinadores con apellidos compuestos iguales/parecidos
+        // (ej. "Castro Cifuentes") no se crucen entre sí.
+        if (!row) {
+            const usrs = JSON.parse(localStorage.getItem('usuarios_usd')||'[]');
+            const uObj = usrs.find(x => _n(x.usuario||'') === uLog);
+            if (uObj) {
+                const uNom = _n(uObj.nombre||'');
+                row = nom.find(r => {
+                    const rNom = _n(r.nombres||r.nombre||'');
+                    if (!rNom || !uNom) return false;
+                    const pw = uNom.split(' ').filter(p=>p.length>2);
+                    const pr = rNom.split(' ').filter(p=>p.length>2);
+                    if (pw.length >= 3 && pr.length >= 3) {
+                        // Nombre completo: exigir que TODAS las palabras buscadas estén presentes
+                        return pw.every(p => pr.includes(p));
+                    }
+                    if (pw.length >= 2 && pr.length >= 2) {
+                        // Nombres cortos: exigir coincidencia exacta de todas las palabras disponibles
+                        return pw.filter(p=>pr.includes(p)).length === pw.length;
+                    }
+                    return false;
+                });
+            }
+        }
+        if (row) {
+            // Columna DOCUMENTO es la cédula en el Excel
+            const cc = String(row.documento||row.cedula||row.cc||row.doc||'').trim();
+            if (cc && cc !== '0' && !_pareceLoginNoCedula(cc, usuario)) return cc;
+        }
+    } catch(e) {}
+    // Buscar en usuarios
+    try {
+        const usrs = JSON.parse(localStorage.getItem('usuarios_usd')||'[]');
+        const u = usrs.find(x => (x.usuario||'').toLowerCase() === (usuario||'').toLowerCase());
+        if (u && u.cedula && !_pareceLoginNoCedula(u.cedula, usuario)) return u.cedula;
+    } catch(e) {}
+    return '___________';
+}
+
+async function _encriptar(texto) {
+    if (!texto || typeof texto !== 'string' || texto.startsWith('ENC:')) return texto;
+    try {
+        const key = await _getAesKey();
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const encrypted = await crypto.subtle.encrypt({name:'AES-GCM',iv}, key, new TextEncoder().encode(texto));
+        const ivHex = Array.from(iv).map(b=>b.toString(16).padStart(2,'0')).join('');
+        const encHex = Array.from(new Uint8Array(encrypted)).map(b=>b.toString(16).padStart(2,'0')).join('');
+        return 'ENC:' + ivHex + encHex;
+    } catch(e) { return texto; }
+}
+
+async function _desencriptar(texto) {
+    if (!texto || typeof texto !== 'string') return texto;
+    if (texto.startsWith('ENC:')) {
+        try {
+            const key = await _getAesKey();
+            const hex = texto.slice(4);
+            const iv = new Uint8Array(hex.slice(0,24).match(/.{2}/g).map(b=>parseInt(b,16)));
+            const data = new Uint8Array(hex.slice(24).match(/.{2}/g).map(b=>parseInt(b,16)));
+            return new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv}, key, data));
+        } catch(e) { return ''; }
+    }
+    // Formato de cifrado de una versión anterior del sistema (prefijo "__enc__" o similar)
+    // que ya no es compatible con el algoritmo actual: no hay forma de recuperar el valor
+    // original, así que se devuelve vacío en vez de mostrar el texto cifrado en pantalla.
+    if (_esValorLegadoIlegible(texto)) return '';
+    return texto;
+}
+
+async function _getAesKey() {
+    if (_aesKey) return _aesKey;
+    _aesKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(_AES_KEY_RAW), {name:'AES-GCM'}, false, ['encrypt','decrypt']);
+    return _aesKey;
+}
+
+function _esValorLegadoIlegible(v) {
+    return typeof v === 'string' && /^_{1,2}enc_{1,2}/i.test(v.trim());
+}
+
+function _usdEsRepresentante(u) {
+    const id = String((u && typeof u === 'object') ? u.usuario : (u || '')).trim().toUpperCase();
+    return _USD_REPRESENTANTES.includes(id);
+}
+
+async function _usdHTMLContrato(u, datos, _editable) {
+    const nombre       = ((typeof _usdNombrePropio === 'function') ? _usdNombrePropio(u.nombre) : (u.nombre||''));
+    const cedula       = (typeof _usdCedula === 'function') ? await _usdCedula(u.usuario) : (u.cedula || '—');
+    // Cédula del representante legal (Brandon): se toma del sistema, igual que la del contratista
+    const repCedula    = (typeof _usdCedula === 'function') ? await _usdCedula('BRANDON.CASTRO') : '—';
+    const _rolCargoMap = {
+        'admin': 'ADMINISTRADOR', 'coordinador': 'COORDINADOR', 'supervisor1': 'SUPERVISOR',
+        'supervisor2': 'SUPERVISOR', 'capacitador': 'CAPACITADOR', 'calidad': 'ANALISTA DE CALIDAD', 'asesor': 'ASESOR', 'conductor': 'CONDUCTOR', 'seleccion': 'SELECCIÓN'
+    };
+    const cargo         = _usdEsRepresentante(u) ? 'REPRESENTANTE' : (_rolCargoMap[u.rol] || 'ASESOR');
+    const esSupervisor   = u.rol === 'supervisor1' || u.rol === 'supervisor2';
+    const grupo          = u.grupo || '—';
+    const plataforma     = u.plataforma || '—';
+    const fechaIngreso  = (typeof _usdFechaIngreso === 'function') ? _usdFechaIngreso(u.usuario) : '—';
+    const fechaDoc      = (typeof _usdFechaLarga === 'function') ? _usdFechaLarga(new Date()) : new Date().toLocaleDateString('es-CO');
+    const ciudad        = 'Bogotá';
+    const ed = _editable;
+    const wt = (val, cls) => ed ? `<span class="edit-field ${cls}" contenteditable="true" spellcheck="false">${val}</span>` : val;
+
+    const _bullets   = (arr) => arr.map(t => `<div class="motivo-item marcado"><span class="chk-box">•</span><span class="chk-label">${t}</span></div>`).join('');
+    const _numerados = (arr, letras) => arr.map((t,i) => `<div class="motivo-item marcado"><span class="chk-box">${letras ? String.fromCharCode(97+i)+'.' : (i+1)+'.'}</span><span class="chk-label">${t}</span></div>`).join('');
+
+    const _esCond = u.rol === 'conductor', _esSel = u.rol === 'seleccion', _esEsp = _esCond || _esSel;
+    const _bloqueEsp = !_esEsp ? '' : `<div class="section-lbl">PRIMERA. OBJETO</div>
+  <div class="body-text">${_esCond
+      ? 'EL CONTRATISTA se obliga a prestar de manera autónoma e independiente el <strong>servicio de transporte de personas</strong> (asesores y demás personal que EL CONTRATANTE designe), de acuerdo con las asignaciones diarias que realicen el Supervisor o el Administrador a través del sistema de USD INFORMATION, bajo el servicio, función o cargo de <strong>CONDUCTOR</strong>.'
+      : 'EL CONTRATISTA se obliga a prestar de manera autónoma e independiente el <strong>servicio de selección de modelos</strong> para las plataformas de EL CONTRATANTE, consistente en ingresar en el sistema de USD INFORMATION la información de cada modelo postulada (nombre, documento de identidad y valor), para que sea revisada y, de ser el caso, aprobada por EL CONTRATANTE, bajo el servicio, función o cargo de <strong>SELECCIÓN</strong>.'}</div>
+
+  <div class="section-lbl">SEGUNDA. ALCANCE Y ACTIVIDADES DEL SERVICIO</div>
+  <div class="body-text">EL CONTRATISTA desarrollará las actividades necesarias para cumplir adecuadamente el objeto contractual. Entre sus principales actividades se encuentran:</div>
+  ${_numerados(_esCond ? [
+      'Realizar el traslado de las personas asignadas para cada día, en la ruta, horario y condiciones indicados por EL CONTRATANTE.',
+      'Registrar en el sistema el inicio y el fin de cada labor; no podrá iniciar una labor si no tiene personas asignadas.',
+      'Conducir con prudencia y de acuerdo con las normas de tránsito, velando por la seguridad de las personas transportadas.',
+      'Informar oportunamente cualquier novedad, retraso, accidente o situación que afecte la prestación del servicio.',
+      'Mantener la confidencialidad sobre la información a la que tenga acceso, incluida la relacionada con las personas que traslada.'
+  ] : [
+      'Buscar y postular modelos conforme a los criterios y políticas definidos por EL CONTRATANTE.',
+      'Ingresar en el sistema, de forma veraz y completa, el nombre, el documento de identidad y el valor de cada modelo; el valor no podrá superar DOSCIENTOS CINCUENTA MIL PESOS ($250.000) por modelo.',
+      'Hacer seguimiento al estado de cada registro (Ingresado, Revisión agencia, Revisión página y Aprobado página) y atender los requerimientos de EL CONTRATANTE.',
+      'Abstenerse de ingresar información falsa, incompleta o de personas que no hayan dado su consentimiento.',
+      'Mantener la confidencialidad sobre la información a la que tenga acceso, incluida la relacionada con las modelos postuladas.'
+  ], true)}
+
+  <div class="section-lbl">TERCERA. HONORARIOS</div>
+  ${_esCond ? `<div class="body-text">Por cada labor ejecutada, EL CONTRATANTE pagará a EL CONTRATISTA el siguiente valor, según el número de personas trasladadas:</div>
+  <table class="tabla-hon"><thead><tr><th>Concepto</th><th>Valor a pagar</th></tr></thead><tbody>
+    <tr><td>Por cada persona trasladada</td><td>$5.000</td></tr>
+  </tbody></table>
+  <div class="body-text">Las personas a trasladar serán asignadas por el Supervisor o el Administrador para cada día. Solo se reconocerán las labores que cuenten con personas asignadas y con inicio y fin registrados en el sistema. Ejemplo: una labor con cuatro (4) personas trasladadas genera un pago de VEINTE MIL PESOS ($20.000).</div>`
+  : `<div class="body-text">Por cada modelo ingresada por EL CONTRATISTA que alcance el estado <strong>Aprobado página</strong>, EL CONTRATANTE pagará el valor registrado para esa modelo, sin que pueda superar DOSCIENTOS CINCUENTA MIL PESOS ($250.000).</div>
+  <div class="body-text">El estado de cada registro es definido exclusivamente por EL CONTRATANTE. Los registros en los estados Ingresado, Revisión agencia o Revisión página no generan pago. Cuando el registro llegue a Aprobado página se cierra y su valor se incluye de inmediato en la liquidación de EL CONTRATISTA.</div>`}
+
+  <div class="section-lbl">CUARTA. PERÍODO DE LIQUIDACIÓN</div>
+  <div class="body-text">Los honorarios se liquidarán mensualmente, tomando los servicios ${_esCond ? 'finalizados' : 'aprobados'} dentro de cada mes calendario, y se pagarán de acuerdo con las fechas y medios de pago que defina EL CONTRATANTE.</div>
+
+  <div class="section-lbl">QUINTA. INCUMPLIMIENTO DE POLÍTICAS</div>
+  <div class="body-text">EL CONTRATISTA se compromete a cumplir las políticas, protocolos y obligaciones relacionadas con la correcta ejecución del servicio. No se pagarán labores o registros que no se hayan ejecutado conforme a este contrato, ni aquellos en que se compruebe información falsa o uso indebido del sistema. Los incumplimientos comprobados y comunicados a EL CONTRATISTA podrán dar lugar a la terminación del contrato, de acuerdo con la cláusula de terminación.</div>
+  ${_esSel ? `<div class="body-text"><strong>PARÁGRAFO. INCUMPLIMIENTO POR QUEJAS O INCONVENIENTES CON LA MODELO.</strong> Cuando una modelo ingresada por EL CONTRATISTA presente quejas o cualquier tipo de inconveniente (entre otros, información falsa o inexacta, falta de consentimiento, reclamaciones de la modelo, de terceros o de las plataformas, o situaciones que afecten a EL CONTRATANTE), debidamente registrado y comunicado a EL CONTRATISTA, este reconoce a favor de EL CONTRATANTE una sanción por incumplimiento por valor de <strong>UN MILLÓN DE PESOS ($1.000.000)</strong> por cada modelo.</div>
+  <div class="body-text">EL CONTRATISTA podrá presentar sus explicaciones dentro de los tres (3) días hábiles siguientes a la comunicación. Si EL CONTRATANTE confirma el incumplimiento, podrá descontar la sanción de los honorarios pendientes o futuros de EL CONTRATISTA, quien autoriza expresamente dicho descuento; si estos no alcanzan a cubrirla, EL CONTRATISTA deberá reintegrar el saldo. Si el valor de esa modelo aún no ha sido pagado, no se pagará. La sanción es única por cada modelo y no excluye la terminación del contrato ni otras acciones a que haya lugar.</div>` : ''}`;
+    const _obligEsp = !_esEsp ? '' : `<div class="body-text"><strong>PARÁGRAFO. OBLIGACIONES ESPECÍFICAS DEL CARGO.</strong> Además de lo anterior, EL CONTRATISTA se obliga a:</div>
+  ${_numerados(_esCond ? [
+      'Mantener vigentes la licencia de conducción y los demás documentos exigidos por la ley para conducir y, cuando el vehículo sea de su propiedad, el SOAT y la revisión técnico-mecánica.',
+      'Abstenerse de conducir bajo los efectos del alcohol, de sustancias psicoactivas o en estado de fatiga.',
+      'Responder por las infracciones de tránsito que cometa en el ejercicio del servicio.'
+  ] : [
+      'Garantizar que la información de cada modelo ingresada en el sistema es veraz y que cuenta con su autorización.',
+      'Respetar el tope de valor por modelo y no modificar ni intentar alterar el estado de los registros, que solo define EL CONTRATANTE.',
+      'Dar un trato respetuoso y digno a las modelos postuladas.'
+  ], true)}`;
+    const _bonoClausula = !esSupervisor ? '' : `
+  <div class="section-lbl">TERCERA A. BONIFICACIÓN POR CUMPLIMIENTO (SUPERVISOR EN COMISIÓN)</div>
+  <div class="body-text">Cuando EL CONTRATISTA se desempeñe como <strong>SUPERVISOR</strong> bajo el esquema de comisión, adicional al esquema de honorarios establecido en la cláusula anterior, EL CONTRATANTE reconocerá una bonificación fija de <strong>DOSCIENTOS MIL PESOS ($200.000)</strong> por cada período de liquidación.</div>
+  <div class="body-text">El pago de esta bonificación estará condicionado al cumplimiento, durante el respectivo período, de los indicadores de <strong>Calidad</strong> y de <strong>Evaluación de Desempeño</strong> establecidos por EL CONTRATANTE para el cargo de Supervisor. En caso de no alcanzarse los umbrales mínimos definidos para dichos indicadores en el período correspondiente, la bonificación no se causará para ese período, sin que ello afecte el esquema de honorarios pactado en la cláusula anterior.</div>`;
+
+    const _aplicaBonoAsesor = (cargo === 'ASESOR' || esSupervisor);
+    const _bonosCumplimiento = !_aplicaBonoAsesor ? '' : `
+  <div class="body-text">Adicional al esquema de honorarios anterior, EL CONTRATANTE reconocerá a EL CONTRATISTA bonificaciones semanales y mensuales por cumplimiento, de acuerdo con su cargo, así:</div>
+  <table class="tabla-hon"><thead><tr><th>Bonificación por cumplimiento</th><th>Bono semanal</th><th>Bono mensual</th></tr></thead><tbody>
+    <tr><td>Asesor</td><td>$20.000</td><td>$40.000</td></tr>
+    ${esSupervisor ? '<tr><td>Supervisor</td><td>$80.000</td><td>$60.000</td></tr>' : ''}
+  </tbody></table>
+  ${esSupervisor ? '<div class="body-text">Como EL CONTRATISTA con cargo de <strong>SUPERVISOR</strong> también tiene un grupo a su cargo, recibirá ambos esquemas de bonificación, el de asesor y el de supervisor, los cuales se reconocen de manera independiente y acumulable.</div>' : ''}
+  <div class="body-text">Los bonos semanales se causarán por cada semana y los bonos mensuales por cada período de corte en que se cumplan las condiciones de cumplimiento establecidas por EL CONTRATANTE, y se perderán en los casos previstos en la cláusula QUINTA de este contrato.</div>`;
+
+    return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Contrato de Prestación de Servicios</title>
+<style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Times New Roman',Times,serif;background:#fff;color:#1a1a2e;font-size:13px;}.page{max-width:720px;margin:0 auto;padding:40px 48px;}.header{display:flex;align-items:center;gap:18px;border-bottom:3px solid #1a2744;padding-bottom:18px;margin-bottom:28px;}.logo-box{background:#1a2744;color:#fff;font-size:22px;font-weight:900;padding:10px 16px;border-radius:8px;letter-spacing:2px;flex-shrink:0;font-family:'Segoe UI',Arial,sans-serif;}.company-name{font-size:18px;font-weight:900;color:#1a2744;text-transform:uppercase;letter-spacing:2px;font-family:'Segoe UI',Arial,sans-serif;}.company-sub{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:3px;margin-top:3px;font-family:'Segoe UI',Arial,sans-serif;}.meta{text-align:right;font-size:10px;color:#888;margin-bottom:24px;line-height:1.7;}.cert-badge{display:inline-block;background:#1a2744;color:#fff;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:2px;padding:4px 14px;border-radius:4px;margin-bottom:20px;font-family:'Segoe UI',Arial,sans-serif;}.company-id{font-size:12px;color:#333;margin-bottom:16px;line-height:1.8;}.body-text{font-size:13px;line-height:1.9;color:#222;margin-bottom:16px;text-align:justify;}.body-text strong{color:#1a2744;}.campo-box{background:#f8fafd;border:1px solid #d0d8e8;border-radius:8px;padding:14px 18px;margin-bottom:18px;}.campo-box .lbl{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#1a2744;font-weight:800;margin-bottom:4px;font-family:'Segoe UI',Arial,sans-serif;}.campo-box .val{font-size:13px;color:#222;white-space:pre-wrap;}.firma-area{margin-top:40px;display:flex;justify-content:space-between;gap:24px;}.firma-col{flex:1;text-align:center;}.firma-slot{height:46px;display:flex;align-items:flex-end;justify-content:center;}.firma-img{max-height:44px;max-width:160px;object-fit:contain;display:block;margin:0 auto;}.firma-name{font-size:12px;font-weight:700;color:#333;}.firma-digital-tag{display:block;font-size:9px;font-weight:600;color:#888;margin-top:1px;font-family:'Segoe UI',Arial,sans-serif;}.firma-linea{border-top:1px solid #999;padding-top:8px;margin-top:8px;}.firma-cargo{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:1px;margin-top:2px;}.footer-note{margin-top:28px;background:#f0f4fa;border:1px solid #c8d8f0;border-radius:6px;padding:10px 16px;font-size:10px;color:#3a5a8a;text-align:center;}.edit-field{border-bottom:1px dashed #1a2744;min-width:20px;display:inline-block;outline:none;background:rgba(26,39,68,0.04);padding:0 2px;border-radius:2px;}.edit-field:focus{background:rgba(26,39,68,0.1);}.motivo-item{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:#222;line-height:1.6;margin-bottom:5px;}.motivo-item .chk-box{font-size:13px;flex-shrink:0;color:#1a2744;font-weight:800;font-family:'Segoe UI',Arial,sans-serif;min-width:16px;}.section-lbl{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#1a2744;font-weight:800;margin:18px 0 8px;font-family:'Segoe UI',Arial,sans-serif;}table.tabla-hon{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:12px;}table.tabla-hon th{background:#1a2744;color:#fff;padding:8px 10px;text-align:left;font-family:'Segoe UI',Arial,sans-serif;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;}table.tabla-hon td{padding:8px 10px;border-bottom:1px solid #e0e6f0;color:#222;}table.tabla-hon tr:nth-child(even) td{background:#f8fafd;}@media print{body{padding:0;}.page{padding:30px 36px;}button{display:none!important;}}</style></head><body>
+<div class="page">
+  <div class="header"><div class="logo-box">USD</div><div><div class="company-name">USDINFORMATION</div><div class="company-sub">Amor real en un mundo digital</div><div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-top:3px;font-family:'Segoe UI',Arial,sans-serif;">N° Registro: <strong style="color:#1a2744;">04070428</strong></div></div></div>
+  <div class="meta">${wt(ciudad,'f-ciudad')}, ${wt(fechaDoc,'f-fecha')}</div>
+  <span class="cert-badge">Contrato de Prestación de Servicios</span>
+  <div class="company-id">Entre los suscritos, por una parte, <strong>USD INFORMATION</strong>, con domicilio en ${wt(ciudad,'f-ciudad2')}, representada legalmente por <strong>${wt(_USD_REP_NOMBRE,'f-repnombre')}</strong>, identificado(a) con C.C. ${wt(repCedula,'f-repcedula')}, quien para efectos del presente contrato se denominará <strong>EL CONTRATANTE</strong>; y por otra parte <strong>${wt(nombre,'f-nombre')}</strong>, identificado(a) con cédula de ciudadanía No. <strong>${wt(cedula,'f-cedula')}</strong>, quien para efectos del presente contrato se denominará <strong>EL CONTRATISTA</strong>, se celebra el presente CONTRATO DE PRESTACIÓN DE SERVICIOS, regido por las siguientes cláusulas:</div>
+
+  <div class="campo-box" style="display:flex;gap:22px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:140px;"><div class="lbl">Nombre Completo</div><div class="val">${wt(nombre,'f-nombre2')}</div></div>
+    <div style="flex:1;min-width:140px;"><div class="lbl">Documento de Identidad</div><div class="val">${wt(cedula,'f-cedula2')}</div></div>
+    <div style="flex:1;min-width:140px;"><div class="lbl">Cargo / Función</div><div class="val">${wt(cargo,'f-cargo')}</div></div>
+    ${_esEsp ? '' : `<div style="flex:1;min-width:140px;"><div class="lbl">Grupo</div><div class="val">${wt(grupo,'f-grupo')}</div></div>`}
+    ${_esEsp ? '' : `<div style="flex:1;min-width:140px;"><div class="lbl">Plataforma</div><div class="val">${wt(plataforma,'f-plataforma')}</div></div>`}
+    <div style="flex:1;min-width:140px;"><div class="lbl">Fecha de Ingreso</div><div class="val">${wt(fechaIngreso,'f-fechaingreso')}</div></div>
+  </div>
+
+  ${_esEsp ? _bloqueEsp : `  <div class="section-lbl">PRIMERA. OBJETO</div>
+  <div class="body-text">EL CONTRATISTA se obliga a prestar de manera autónoma e independiente servicios relacionados con las actividades de CHAT CENTER, de acuerdo con el servicio, función o cargo de <strong>${wt(cargo,'f-cargo2')}</strong> registrado en los sistemas internos de USD INFORMATION.</div>
+  <div class="body-text">El servicio comprende la gestión de conversaciones en las plataformas asignadas, atención y seguimiento de usuarios, desarrollo del plan de trabajo, cumplimiento de las metas establecidas y aplicación de los protocolos operativos y de calidad relacionados con el servicio.</div>
+
+  <div class="section-lbl">SEGUNDA. ALCANCE Y ACTIVIDADES DEL SERVICIO</div>
+  <div class="body-text">EL CONTRATISTA desarrollará las actividades necesarias para cumplir adecuadamente el objeto contractual, procurando los resultados y estándares de calidad establecidos para el servicio. Entre sus principales actividades se encuentran:</div>
+  ${_numerados([
+      'Realizar las actividades correspondientes al servicio de Chat Center.',
+      'Cumplir las metas y objetivos establecidos para el período de liquidación.',
+      'Ejecutar el plan de trabajo correspondiente al servicio contratado.',
+      'Gestionar adecuadamente las plataformas y cuentas asignadas.',
+      'Cumplir los protocolos y políticas relacionados con la correcta ejecución del servicio.',
+      'Mantener la confidencialidad sobre la información a la que tenga acceso.',
+      'Informar oportunamente cualquier situación que pueda afectar la correcta ejecución del servicio.',
+      'Entregar la información, reportes, resultados o elementos que correspondan al desarrollo del servicio.'
+  ], true)}
+
+  <div class="section-lbl">TERCERA. ESQUEMA DE HONORARIOS Y METAS</div>
+  <div class="body-text">La remuneración de EL CONTRATISTA estará determinada de acuerdo con el nivel de resultados obtenido durante cada período de liquidación, tomando como referencia la cantidad de puntos alcanzados durante el respectivo período. El esquema de honorarios será el siguiente:</div>
+  <table class="tabla-hon"><thead><tr><th>Puntos obtenidos durante el período</th><th>Valor a pagar</th></tr></thead><tbody>
+    <tr><td>0 a 944 puntos</td><td>$1.600</td></tr>
+    <tr><td>945 a 1.214 puntos</td><td>$1.650</td></tr>
+    <tr><td>1.215 puntos o más</td><td>$1.700</td></tr>
+  </tbody></table>
+  <div class="body-text">El valor correspondiente será determinado con base en los puntos efectivamente registrados para EL CONTRATISTA durante el período de liquidación. Los valores anteriormente establecidos corresponden al esquema económico pactado para la prestación del servicio y estarán sujetos a las retenciones, aportes o deducciones que legalmente correspondan.</div>
+  ${_bonosCumplimiento}
+  ${_bonoClausula}
+
+  <div class="section-lbl">CUARTA. PERÍODO DE CORTE Y LIQUIDACIÓN</div>
+  <div class="body-text">Para efectos de medición de resultados y liquidación de los honorarios, las partes acuerdan que cada período de trabajo comprenderá desde el día 11 de cada mes hasta el día 10 del mes siguiente. Los puntos obtenidos dentro de dicho período serán los utilizados para determinar el nivel de honorarios correspondiente.</div>
+  <div class="body-text">Por ejemplo, el período comprendido entre el 11 de septiembre y el 10 de octubre será liquidado tomando en consideración los puntos obtenidos durante esas fechas.</div>
+
+  <div class="section-lbl">QUINTA. INCUMPLIMIENTO DE POLÍTICAS Y AJUSTE DEL VALOR</div>
+  <div class="body-text">EL CONTRATISTA se compromete a cumplir las políticas, protocolos, procedimientos y obligaciones relacionadas con la correcta ejecución del servicio. Cuando durante el respectivo período de corte se presente uno o varios incumplimientos comprobados de las políticas u obligaciones contractuales, debidamente registrados y comunicados a EL CONTRATISTA, se aplicará un ajuste de CINCUENTA PESOS ($50) sobre el valor del nivel de honorarios alcanzado durante dicho período. El ajuste de $50 será único por cada período de corte, independientemente del número de incumplimientos o llamados de atención que se presenten durante dicho período. En consecuencia, los valores aplicables serán:</div>
+  <table class="tabla-hon"><thead><tr><th>Puntos obtenidos</th><th>Valor base</th><th>Valor con incumplimiento</th></tr></thead><tbody>
+    <tr><td>0 a 944</td><td>$1.600</td><td>$1.550</td></tr>
+    <tr><td>945 a 1.214</td><td>$1.650</td><td>$1.600</td></tr>
+    <tr><td>1.215 o más</td><td>$1.700</td><td>$1.650</td></tr>
+  </tbody></table>
+  <div class="body-text">El ajuste económico se aplicará cuando exista un incumplimiento verificable y relacionado directamente con las obligaciones, políticas o protocolos previamente comunicados a EL CONTRATISTA. Para efectos de este contrato, el incumplimiento podrá constar mediante registros internos, informes, evidencias operativas, auditorías, reportes de calidad o cualquier otro medio que permita acreditar objetivamente la situación. El ajuste establecido en esta cláusula constituye una condición económica previamente pactada entre las partes respecto de los honorarios del servicio y no constituye una sanción disciplinaria laboral.</div>
+  <div class="body-text"><strong>PARÁGRAFO PRIMERO. RETARDOS Y FALLAS.</strong> Los retardos y las fallas sin justificar se consideran incumplimientos de las políticas y obligaciones del servicio. En consecuencia, cuando se presenten durante el período de corte darán lugar al ajuste de CINCUENTA PESOS ($50) y a los valores con incumplimiento previstos en la tabla anterior, bajo las mismas reglas de esta cláusula (ajuste único por período de corte). Adicionalmente, y de forma independiente a dicho ajuste, se aplicarán las siguientes reglas sobre los bonos, entendiéndose por mes el período de corte definido en la cláusula CUARTA:</div>
+  ${_numerados([
+      '<strong>Retardos:</strong> al acumular dos (2) retardos dentro de una misma semana, EL CONTRATISTA perderá el bono semanal. Al acumular cinco (5) retardos dentro del mes, perderá el bono mensual.',
+      '<strong>Fallas sin justificar:</strong> con una (1) falla sin justificar dentro de una misma semana, EL CONTRATISTA perderá el bono semanal. Al acumular tres (3) fallas sin justificar dentro del mes, perderá el bono mensual.'
+  ], true)}
+  <div class="body-text">La pérdida de los bonos prevista en este parágrafo se aplica además del ajuste del valor establecido en esta cláusula y no lo sustituye.${esSupervisor ? ' Cuando EL CONTRATISTA sea supervisor, la pérdida del bono semanal o mensual aplica a los dos bonos correspondientes (el de asesor y el de supervisor).' : ''}</div>
+  <div class="body-text"><strong>PARÁGRAFO SEGUNDO. ANOTACIONES POR USO DEL TELÉFONO.</strong> Las anotaciones por uso del teléfono celular personal durante las horas de labor y atención en el turno, en contravía de lo establecido en el Reglamento Interno de Trabajo y en las políticas del servicio, debidamente registradas y comunicadas a EL CONTRATISTA, se acumularán durante la vigencia del contrato. Cuando EL CONTRATISTA acumule tres (3) anotaciones por uso del teléfono, se causará de forma automática un ajuste económico por valor de DIEZ MIL PESOS ($10.000), que se reflejará como descuento en la liquidación de honorarios correspondiente. Este mismo ajuste se causará nuevamente por cada nuevo grupo de tres (3) anotaciones acumuladas.${esSupervisor ? ' Cuando EL CONTRATISTA sea supervisor, también se entenderá como anotación por uso del teléfono la que se registre por no controlar el uso del celular personal por parte de los asesores a su cargo.' : ''}</div>
+  `}
+
+  <div class="section-lbl">SEXTA. DURACIÓN</div>
+  <div class="body-text">El presente contrato tendrá una duración indefinida, iniciando el día ${wt(fechaIngreso,'f-fechainicio')}, y permanecerá vigente mientras subsista el objeto contractual y no se produzca alguna de las causales de terminación previstas en este documento.</div>
+
+  <div class="section-lbl">SÉPTIMA. LUGAR DE PRESTACIÓN DEL SERVICIO</div>
+  <div class="body-text">${_esEsp ? 'La prestación del servicio se realizará en los lugares, rutas y modalidades que EL CONTRATANTE disponga para el desarrollo de las actividades relacionadas con el objeto contractual.' : 'La prestación del servicio será realizada de manera presencial, en las instalaciones o lugar dispuesto por EL CONTRATANTE para el desarrollo de las actividades relacionadas con el objeto contractual.'} La ejecución presencial deberá coordinarse de acuerdo con las necesidades propias del servicio, conservando EL CONTRATISTA la autonomía e independencia que caracteriza la presente relación contractual.</div>
+
+  <div class="section-lbl">OCTAVA. AUTONOMÍA E INDEPENDENCIA</div>
+  <div class="body-text">EL CONTRATISTA manifiesta que celebra el presente contrato en calidad de contratista independiente y que desarrollará el objeto contractual con autonomía técnica, administrativa y operativa. Los protocolos, estándares de calidad, metas, procedimientos y lineamientos relacionados con el resultado y correcta ejecución del servicio constituyen condiciones propias del objeto contractual y no deberán interpretarse como subordinación laboral. EL CONTRATISTA será responsable de la correcta ejecución de las obligaciones que asume mediante este contrato.</div>
+
+  <div class="section-lbl">NOVENA. OBLIGACIONES DE EL CONTRATISTA</div>
+  <div class="body-text">EL CONTRATISTA se obliga a:</div>
+  ${_numerados([
+      'Ejecutar personalmente las actividades necesarias para el cumplimiento del objeto contratado.',
+      'Cumplir las metas y resultados establecidos.',
+      'Ejecutar el plan de trabajo correspondiente.',
+      'Observar las políticas de seguridad, confidencialidad, protección de información y uso adecuado de las herramientas.',
+      'No compartir, transferir, vender, copiar o utilizar para beneficio propio o de terceros información obtenida durante la prestación del servicio.',
+      'No divulgar información relacionada con clientes, modelos, usuarios, plataformas, cuentas, procesos, estrategias, resultados o bases de datos de USD INFORMATION.',
+      'Informar cualquier incidente que pueda afectar la seguridad de la información.',
+      'Restituir los equipos, documentos, materiales y accesos que pertenezcan a EL CONTRATANTE al finalizar el servicio.'
+  ], true)}
+
+  ${_obligEsp}
+
+  <div class="section-lbl">DÉCIMA. OBLIGACIONES DE EL CONTRATANTE</div>
+  <div class="body-text">EL CONTRATANTE se obliga a:</div>
+  ${_numerados([
+      'Suministrar la información necesaria para la ejecución del objeto contractual.',
+      'Facilitar, cuando corresponda, los accesos, herramientas o recursos necesarios para el servicio.',
+      'Informar las condiciones aplicables al cálculo de los honorarios y comisiones.',
+      'Realizar los pagos correspondientes conforme al esquema pactado.',
+      'Dar tratamiento a la información personal conforme a la legislación aplicable.'
+  ], true)}
+
+  <div class="section-lbl">DÉCIMA PRIMERA. CONFIDENCIALIDAD Y RESERVA</div>
+  <div class="body-text">EL CONTRATISTA deberá mantener absoluta reserva sobre toda información confidencial a la que tenga acceso con ocasión del contrato. Se considera información confidencial, entre otra, la relacionada con clientes, modelos, usuarios, fotografías, videos, conversaciones, cuentas, contraseñas, bases de datos, estrategias, procedimientos, documentos, información financiera, información comercial, material de trabajo y cualquier otra información interna de USD INFORMATION. EL CONTRATISTA no podrá divulgar, reproducir, almacenar, transferir o utilizar dicha información para fines diferentes a la ejecución del contrato. Esta obligación permanecerá vigente incluso después de la terminación del contrato.</div>
+
+  <div class="section-lbl">DÉCIMA SEGUNDA. PROTECCIÓN DE DATOS PERSONALES</div>
+  <div class="body-text">EL CONTRATISTA se compromete a tratar los datos personales únicamente para los fines autorizados y relacionados con el objeto contractual. Deberá adoptar las medidas necesarias para evitar la pérdida, divulgación, modificación, consulta o acceso no autorizado a dicha información. Queda prohibido copiar, descargar, almacenar, transferir o compartir información personal para fines particulares o ajenos al servicio contratado.</div>
+
+  <div class="section-lbl">DÉCIMA TERCERA. USO DE CUENTAS, PLATAFORMAS Y EQUIPOS</div>
+  <div class="body-text">Las cuentas, usuarios, contraseñas, plataformas, equipos, documentos, materiales y demás recursos proporcionados por EL CONTRATANTE serán utilizados exclusivamente para el desarrollo del objeto contractual. EL CONTRATISTA no podrá prestar, transferir, vender, compartir o permitir el acceso de terceros a las cuentas o credenciales asignadas. Al finalizar el contrato deberá devolver los elementos recibidos y cesar inmediatamente el uso de los accesos proporcionados.</div>
+
+  <div class="section-lbl">DÉCIMA CUARTA. PROPIEDAD Y USO DEL MATERIAL</div>
+  <div class="body-text">Todo material, documento, información, contenido, metodología, archivo, reporte, diseño, pieza o recurso elaborado específicamente para EL CONTRATANTE dentro de la ejecución del servicio deberá utilizarse exclusivamente para los fines autorizados por USD INFORMATION. EL CONTRATISTA no podrá copiar, comercializar, publicar, transferir, reproducir o utilizar dicho material para beneficio propio o de terceros sin autorización previa y expresa.</div>
+
+  <div class="section-lbl">DÉCIMA QUINTA. CUMPLIMIENTO DE POLÍTICAS</div>
+  <div class="body-text">EL CONTRATISTA declara conocer y aceptar las políticas, protocolos y condiciones aplicables al servicio. El incumplimiento comprobado de las obligaciones contractuales, políticas de confidencialidad, seguridad, protección de información, uso de plataformas o demás condiciones pactadas podrá generar las consecuencias económicas expresamente previstas en este contrato y, cuando corresponda, constituir causal de terminación.</div>
+
+  <div class="section-lbl">DÉCIMA SEXTA. SEGURIDAD SOCIAL</div>
+  <div class="body-text">EL CONTRATISTA será responsable de cumplir las obligaciones que legalmente le correspondan en materia de seguridad social, aportes y demás obligaciones derivadas de su condición de trabajador independiente, cuando sean aplicables.</div>
+
+  <div class="section-lbl">DÉCIMA SÉPTIMA. TERMINACIÓN DEL CONTRATO</div>
+  <div class="body-text">El presente contrato podrá terminar por cualquiera de las siguientes causas:</div>
+  ${_numerados([
+      'Mutuo acuerdo entre las partes.',
+      'Incumplimiento de las obligaciones contractuales.',
+      'Incumplimiento grave de las políticas de confidencialidad, seguridad o protección de información.',
+      'Uso indebido de cuentas, plataformas, equipos o información.',
+      'Divulgación o utilización no autorizada de información confidencial.',
+      'Abandono injustificado de las actividades necesarias para la ejecución del objeto contractual.',
+      'Imposibilidad legal o material de continuar ejecutando el objeto contractual.',
+      'Desaparición de la necesidad que dio origen al servicio.',
+      `Decisión unilateral de cualquiera de las partes, mediante aviso previo de ${wt('30','f-diasaviso')} días calendario, salvo que exista una causal de terminación inmediata.`,
+      'Cualquier otra causal establecida legalmente o acordada entre las partes.'
+  ], true)}
+  <div class="body-text">La terminación no afectará las obligaciones que por su naturaleza deban continuar vigentes, especialmente las relacionadas con confidencialidad, protección de datos, propiedad de información y devolución de elementos.</div>
+
+  <div class="section-lbl">DÉCIMA OCTAVA. DEVOLUCIÓN DE INFORMACIÓN Y ELEMENTOS</div>
+  <div class="body-text">Al finalizar el contrato, EL CONTRATISTA deberá entregar todos los equipos, documentos, archivos, materiales, accesos, credenciales y demás elementos pertenecientes a USD INFORMATION. Asimismo, deberá eliminar cualquier copia no autorizada de información confidencial o datos personales que conserve en sus dispositivos.</div>
+
+  <div class="section-lbl">DÉCIMA NOVENA. NO CESIÓN</div>
+  <div class="body-text">EL CONTRATISTA no podrá ceder total o parcialmente las obligaciones derivadas del presente contrato ni permitir que terceros ejecuten las actividades contratadas sin autorización previa y expresa de EL CONTRATANTE.</div>
+
+  <div class="section-lbl">VIGÉSIMA. SOLUCIÓN DE CONTROVERSIAS</div>
+  <div class="body-text">Las partes procurarán resolver directamente cualquier diferencia relacionada con la interpretación, ejecución o terminación del presente contrato. En caso de no lograrse un acuerdo, podrán acudir a los mecanismos de conciliación y demás mecanismos legalmente disponibles.</div>
+
+  <div class="section-lbl">VIGÉSIMA PRIMERA. LEGISLACIÓN APLICABLE</div>
+  <div class="body-text">El presente contrato se regirá por las leyes de la República de Colombia y las normas aplicables a su naturaleza contractual.</div>
+
+  <div class="section-lbl">VIGÉSIMA SEGUNDA. INTEGRIDAD DEL CONTRATO</div>
+  <div class="body-text">El presente documento contiene el acuerdo entre las partes respecto del objeto contratado y reemplaza cualquier acuerdo anterior, verbal o escrito, relacionado con el mismo objeto, salvo aquellos documentos que expresamente se incorporen como parte integral del contrato.</div>
+  <div class="body-text">En constancia de lo anterior, las partes manifiestan haber leído, comprendido y aceptado el contenido del presente contrato y lo suscriben en ${wt(ciudad,'f-ciudad3')}, a los ${wt(new Date().getDate().toString(),'f-dia')} días del mes de ${wt(['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][new Date().getMonth()],'f-mes')} de ${wt(new Date().getFullYear().toString(),'f-anio')}.</div>
+
+  <div class="firma-area">
+    <div class="firma-col">
+      <div class="firma-slot"><img class="firma-img" src="${_FIRMA_BRANDON_B64}" alt="Firma"></div>
+      <div class="firma-linea"><div class="firma-name">${wt(_USD_REP_NOMBRE,'f-firmante')}</div><div class="firma-cargo">Representante Legal — USDINFORMATION</div></div>
+    </div>
+    <div class="firma-col">
+      <div class="firma-slot">${(datos.estado === 'aceptado') ? `<div class="firma-name">${wt(nombre,'f-nombre-firma')}<span class="firma-digital-tag">(Firma digital)</span></div>` : ''}</div>
+      <div class="firma-linea"><div class="firma-name">${wt(nombre,'f-nombre-firma-abajo')}</div><div class="firma-cargo">EL CONTRATISTA</div>${datos.estado === 'aceptado' && datos.fechaAceptacion ? `<div class="firma-cargo" style="margin-top:2px;">Firmado el ${new Date(datos.fechaAceptacion).toLocaleString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>` : (datos.firmaFisica ? `<div class="firma-cargo" style="margin-top:2px;">Firmado en persona</div>` : '')}</div>
+    </div>
+  </div>
+  <div class="footer-note">Documento generado digitalmente por USDINFORMATION · No requiere sello físico</div>
+  <div style="text-align:center;margin-top:18px;"><button onclick="window.print()" style="background:#1a2744;color:#fff;border:none;padding:9px 28px;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px;font-family:'Segoe UI',Arial,sans-serif;">🖨️ Imprimir / Guardar PDF</button></div>
+</div>
+</body></html>`;
+}
+
+async function _usdHTMLAcuerdoConfidencialidad(u, datos, _editable) {
+    const nombre       = ((typeof _usdNombrePropio === 'function') ? _usdNombrePropio(u.nombre) : (u.nombre||''));
+    const cedula       = (typeof _usdCedula === 'function') ? await _usdCedula(u.usuario) : (u.cedula || '—');
+    const _rolCargoMap = {
+        'admin': 'ADMINISTRADOR', 'coordinador': 'COORDINADOR', 'supervisor1': 'SUPERVISOR',
+        'supervisor2': 'SUPERVISOR', 'capacitador': 'CAPACITADOR', 'calidad': 'ANALISTA DE CALIDAD', 'asesor': 'ASESOR'
+    };
+    const cargo         = _usdEsRepresentante(u) ? 'REPRESENTANTE' : (_rolCargoMap[u.rol] || 'ASESOR');
+    const fechaIngreso  = (typeof _usdFechaIngreso === 'function') ? _usdFechaIngreso(u.usuario) : '—';
+    const fechaDoc      = (typeof _usdFechaLarga === 'function') ? _usdFechaLarga(new Date()) : new Date().toLocaleDateString('es-CO');
+    const ciudad        = 'Bogotá';
+    const ed = _editable;
+    const wt = (val, cls) => ed ? `<span class="edit-field ${cls}" contenteditable="true" spellcheck="false">${val}</span>` : val;
+
+    const _bullets = (arr) => arr.map(t => `<div class="motivo-item marcado"><span class="chk-box">•</span><span class="chk-label">${t}</span></div>`).join('');
+    const _numerados = (arr) => arr.map((t,i) => `<div class="motivo-item marcado"><span class="chk-box">${i+1}.</span><span class="chk-label">${t}</span></div>`).join('');
+
+    return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Acuerdo de Confidencialidad y No Divulgación</title>
+<style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Times New Roman',Times,serif;background:#fff;color:#1a1a2e;font-size:13px;}.page{max-width:720px;margin:0 auto;padding:40px 48px;}.header{display:flex;align-items:center;gap:18px;border-bottom:3px solid #1a2744;padding-bottom:18px;margin-bottom:28px;}.logo-box{background:#1a2744;color:#fff;font-size:22px;font-weight:900;padding:10px 16px;border-radius:8px;letter-spacing:2px;flex-shrink:0;font-family:'Segoe UI',Arial,sans-serif;}.company-name{font-size:18px;font-weight:900;color:#1a2744;text-transform:uppercase;letter-spacing:2px;font-family:'Segoe UI',Arial,sans-serif;}.company-sub{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:3px;margin-top:3px;font-family:'Segoe UI',Arial,sans-serif;}.meta{text-align:right;font-size:10px;color:#888;margin-bottom:24px;line-height:1.7;}.cert-badge{display:inline-block;background:#1a2744;color:#fff;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:2px;padding:4px 14px;border-radius:4px;margin-bottom:20px;font-family:'Segoe UI',Arial,sans-serif;}.company-id{font-size:12px;color:#333;margin-bottom:16px;line-height:1.8;}.body-text{font-size:13px;line-height:1.9;color:#222;margin-bottom:16px;text-align:justify;}.body-text strong{color:#1a2744;}.campo-box{background:#f8fafd;border:1px solid #d0d8e8;border-radius:8px;padding:14px 18px;margin-bottom:18px;}.campo-box .lbl{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#1a2744;font-weight:800;margin-bottom:4px;font-family:'Segoe UI',Arial,sans-serif;}.campo-box .val{font-size:13px;color:#222;white-space:pre-wrap;}.firma-area{margin-top:40px;display:flex;justify-content:space-between;gap:24px;}.firma-col{flex:1;text-align:center;}.firma-slot{height:46px;display:flex;align-items:flex-end;justify-content:center;}.firma-img{max-height:44px;max-width:160px;object-fit:contain;display:block;margin:0 auto;}.firma-name{font-size:12px;font-weight:700;color:#333;}.firma-digital-tag{display:block;font-size:9px;font-weight:600;color:#888;margin-top:1px;font-family:'Segoe UI',Arial,sans-serif;}.firma-linea{border-top:1px solid #999;padding-top:8px;margin-top:8px;}.firma-cargo{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:1px;margin-top:2px;}.footer-note{margin-top:28px;background:#f0f4fa;border:1px solid #c8d8f0;border-radius:6px;padding:10px 16px;font-size:10px;color:#3a5a8a;text-align:center;}.edit-field{border-bottom:1px dashed #1a2744;min-width:20px;display:inline-block;outline:none;background:rgba(26,39,68,0.04);padding:0 2px;border-radius:2px;}.edit-field:focus{background:rgba(26,39,68,0.1);}.motivo-item{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:#222;line-height:1.6;margin-bottom:5px;}.motivo-item .chk-box{font-size:13px;flex-shrink:0;color:#1a2744;font-weight:800;font-family:'Segoe UI',Arial,sans-serif;min-width:16px;}.motivo-item.marcado .chk-label{font-weight:500;}.section-lbl{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#1a2744;font-weight:800;margin:18px 0 8px;font-family:'Segoe UI',Arial,sans-serif;}@media print{body{padding:0;}.page{padding:30px 36px;}button{display:none!important;}}</style></head><body>
+<div class="page">
+  <div class="header"><div class="logo-box">USD</div><div><div class="company-name">USDINFORMATION</div><div class="company-sub">Amor real en un mundo digital</div><div style="font-size:9px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-top:3px;font-family:'Segoe UI',Arial,sans-serif;">N° Registro: <strong style="color:#1a2744;">04070428</strong></div></div></div>
+  <div class="meta">${wt(ciudad,'f-ciudad')}, ${wt(fechaDoc,'f-fecha')}</div>
+  <span class="cert-badge">Acuerdo de Confidencialidad y No Divulgación</span>
+  <div class="company-id"><strong>USDINFORMATION S.A.S</strong>, en adelante <strong>"LA EMPRESA"</strong>, y el colaborador o contratista que suscribe el presente documento, <strong>${wt(nombre,'f-nombre')}</strong>, identificado(a) con C.C. No. <strong>${wt(cedula,'f-cedula')}</strong>, quien se desempeña como <strong>${wt(cargo,'f-cargo')}</strong>, en adelante denominado <strong>"EL COLABORADOR"</strong>, acuerdan el presente Acuerdo de Confidencialidad y No Divulgación, el cual se regirá por las siguientes cláusulas:</div>
+
+  <div class="campo-box" style="display:flex;gap:22px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:150px;"><div class="lbl">Nombre Completo</div><div class="val">${wt(nombre,'f-nombre2')}</div></div>
+    <div style="flex:1;min-width:150px;"><div class="lbl">Documento de Identidad</div><div class="val">${wt(cedula,'f-cedula2')}</div></div>
+    <div style="flex:1;min-width:150px;"><div class="lbl">Fecha de Ingreso</div><div class="val">${wt(fechaIngreso,'f-fechaingreso')}</div></div>
+  </div>
+
+  <div class="section-lbl">1. Objeto</div>
+  <div class="body-text">El presente acuerdo tiene como finalidad proteger toda la información confidencial, técnica, comercial, estratégica y operativa relacionada con las actividades de LA EMPRESA, especialmente aquellas vinculadas con la operación de su plataforma de chat de citas, bases de datos de usuarios, sistemas tecnológicos, estrategias de marketing y procesos internos.</div>
+
+  <div class="section-lbl">2. Definición de Información Confidencial</div>
+  <div class="body-text" style="margin-bottom:8px;">Se considerará Información Confidencial, sin limitarse a:</div>
+  ${_bullets([
+      'Bases de datos de usuarios y clientes.',
+      'Información personal de usuarios de la plataforma.',
+      'Estrategias comerciales y de marketing.',
+      'Estructura operativa del negocio.',
+      'Software, algoritmos, sistemas internos y tecnología utilizada.',
+      'Procedimientos de moderación, comunicación o interacción con usuarios.',
+      'Información financiera, planes de expansión o alianzas comerciales.',
+      'Cualquier otra información no pública relacionada con la empresa.'
+  ])}
+
+  <div class="section-lbl">3. Obligaciones del Colaborador</div>
+  <div class="body-text" style="margin-bottom:8px;">EL COLABORADOR se compromete a:</div>
+  ${_numerados([
+      'Mantener absoluta confidencialidad sobre toda la información recibida.',
+      'No copiar, compartir, transferir o divulgar información a terceros sin autorización escrita de LA EMPRESA.',
+      'Utilizar la información únicamente para el desarrollo de sus funciones dentro de la empresa.',
+      'Proteger adecuadamente credenciales, accesos, documentos o archivos digitales.',
+      'Notificar inmediatamente cualquier intento de acceso no autorizado o filtración de información.'
+  ])}
+
+  <div class="section-lbl">4. Prohibiciones</div>
+  <div class="body-text" style="margin-bottom:8px;">Queda estrictamente prohibido para EL COLABORADOR:</div>
+  ${_bullets([
+      'Compartir información de usuarios o del sistema con terceros.',
+      'Publicar datos internos en redes sociales, foros o plataformas externas.',
+      'Extraer bases de datos o capturas del sistema.',
+      'Utilizar información interna para beneficio personal o de terceros.',
+      'Copiar software, herramientas o procesos desarrollados por LA EMPRESA.'
+  ])}
+
+  <div class="section-lbl">5. Vigencia del Acuerdo</div>
+  <div class="body-text">Este acuerdo entra en vigencia desde la fecha de firma y continuará vigente incluso después de finalizada la relación laboral o contractual, por un período mínimo de 5 años, o el máximo permitido por la ley aplicable.</div>
+
+  <div class="section-lbl">6. Propiedad de la Información</div>
+  <div class="body-text">Toda la información, sistemas, documentos, bases de datos y desarrollos tecnológicos pertenecen exclusivamente a LA EMPRESA USDINFORMATION. El colaborador reconoce que no adquiere ningún derecho de propiedad sobre dicha información.</div>
+
+  <div class="section-lbl">7. Incumplimiento y Responsabilidad Legal</div>
+  <div class="body-text" style="margin-bottom:8px;">En caso de incumplimiento de este acuerdo:</div>
+  ${_bullets([
+      'LA EMPRESA podrá iniciar acciones disciplinarias, civiles y/o penales según corresponda.',
+      'EL COLABORADOR será responsable por daños y perjuicios ocasionados a la empresa.',
+      'LA EMPRESA podrá reclamar indemnización económica por pérdidas, daños reputacionales o filtración de datos.',
+      'El incumplimiento podrá resultar en terminación inmediata del contrato laboral o de colaboración.'
+  ])}
+
+  <div class="section-lbl">8. Devolución de Información</div>
+  <div class="body-text">Al finalizar la relación laboral o contractual, EL COLABORADOR deberá devolver o eliminar toda la información confidencial, documentos, archivos digitales, credenciales o cualquier material propiedad de LA EMPRESA.</div>
+
+  <div class="section-lbl">9. Legislación Aplicable</div>
+  <div class="body-text">Este acuerdo se regirá conforme a las leyes aplicables del país donde opere USDINFORMATION y cualquier controversia será resuelta ante los tribunales competentes correspondientes.</div>
+
+  <div class="section-lbl">10. Aceptación</div>
+  <div class="body-text">Las partes declaran haber leído, comprendido y aceptado las condiciones del presente Acuerdo de Confidencialidad y No Divulgación.</div>
+
+  <div class="firma-area">
+    <div class="firma-col">
+      <div class="firma-slot"><img class="firma-img" src="${_FIRMA_BRANDON_B64}" alt="Firma"></div>
+      <div class="firma-linea"><div class="firma-name">${wt(_USD_REP_NOMBRE,'f-firmante')}</div><div class="firma-cargo">Representante Legal — USDINFORMATION</div></div>
+    </div>
+    <div class="firma-col">
+      <div class="firma-slot">${(datos.estado === 'aceptado') ? `<div class="firma-name">${wt(nombre,'f-nombre-firma')}<span class="firma-digital-tag">(Firma digital)</span></div>` : ''}</div>
+      <div class="firma-linea"><div class="firma-name">${wt(nombre,'f-nombre-firma-abajo')}</div><div class="firma-cargo">EL COLABORADOR</div>${datos.estado === 'aceptado' && datos.fechaAceptacion ? `<div class="firma-cargo" style="margin-top:2px;">Firmado el ${new Date(datos.fechaAceptacion).toLocaleString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>` : (datos.firmaFisica ? `<div class="firma-cargo" style="margin-top:2px;">Firmado en persona</div>` : '')}</div>
+    </div>
+  </div>
+  <div class="footer-note">Documento generado digitalmente por USDINFORMATION · No requiere sello físico</div>
+  <div style="text-align:center;margin-top:18px;"><button onclick="window.print()" style="background:#1a2744;color:#fff;border:none;padding:9px 28px;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px;font-family:'Segoe UI',Arial,sans-serif;">🖨️ Imprimir / Guardar PDF</button></div>
+</div></body></html>`;
+}
+
+function _contratosCargar() {
+    try {
+        const raw = JSON.parse(localStorage.getItem('usd_contratos') || '[]');
+        return Array.isArray(raw) ? raw : Object.values(raw || {});
+    } catch(e) { return []; }
+}
+
+function _contratoDeUsuario(usuario) {
+    return _contratosCargar().find(x => x.usuario === usuario) || null;
+}
+
+function _contratoAsegurar(u) {
+    let r = _contratoDeUsuario(u.usuario);
+    if (r) return r;
+    r = {
+        id: 'con_' + Date.now() + '_' + Math.random().toString(36).slice(2,8),
+        usuario: u.usuario,
+        nombre: (typeof _usdNombrePropio === 'function') ? _usdNombrePropio(u.nombre) : u.nombre,
+        estado: 'pendiente',
+        fechaGeneracion: Date.now(),
+        generadoPorUsuario: (window.userLogueado && window.userLogueado.usuario) || ''
+    };
+    const lista = _contratosCargar();
+    lista.unshift(r);
+    _contratosGuardar(lista);
+    return r;
+}
+
+function usdFirmarContrato(id) {
+    if (!window.userLogueado) return;
+    const lista = _contratosCargar();
+    const idx = lista.findIndex(x => x.id === id);
+    if (idx === -1) { if(typeof toast==='function') toast('No se encontró el documento.','error'); return; }
+    if (lista[idx].usuario !== window.userLogueado.usuario) { if(typeof toast==='function') toast('Este documento no te pertenece.','error'); return; }
+    if (lista[idx].estado === 'aceptado') return;
+    lista[idx].estado = 'aceptado';
+    lista[idx].fechaAceptacion = Date.now();
+    _contratosGuardar(lista);
+    if (typeof toast === 'function') toast('✅ Contrato firmado digitalmente.', 'success', 5000);
+    if (typeof _usdVerContrato === 'function') _usdVerContrato(window.userLogueado.usuario);
+}
+
+function _acuerdosCargar() {
+    try {
+        const raw = JSON.parse(localStorage.getItem('usd_acuerdos_confidencialidad') || '[]');
+        return Array.isArray(raw) ? raw : Object.values(raw || {});
+    } catch(e) { return []; }
+}
+
+function _acuerdoDeUsuario(usuario) {
+    return _acuerdosCargar().find(x => x.usuario === usuario) || null;
+}
+
+function _acuerdoAsegurar(u) {
+    let r = _acuerdoDeUsuario(u.usuario);
+    if (r) return r;
+    r = {
+        id: 'acu_' + Date.now() + '_' + Math.random().toString(36).slice(2,8),
+        usuario: u.usuario,
+        nombre: (typeof _usdNombrePropio === 'function') ? _usdNombrePropio(u.nombre) : u.nombre,
+        estado: 'pendiente',
+        fechaGeneracion: Date.now(),
+        generadoPorUsuario: (window.userLogueado && window.userLogueado.usuario) || ''
+    };
+    const lista = _acuerdosCargar();
+    lista.unshift(r);
+    _acuerdosGuardar(lista);
+    return r;
+}
+
+function usdFirmarAcuerdoConfidencialidad(id) {
+    if (!window.userLogueado) return;
+    const lista = _acuerdosCargar();
+    const idx = lista.findIndex(x => x.id === id);
+    if (idx === -1) { if(typeof toast==='function') toast('No se encontró el documento.','error'); return; }
+    if (lista[idx].usuario !== window.userLogueado.usuario) { if(typeof toast==='function') toast('Este documento no te pertenece.','error'); return; }
+    if (lista[idx].estado === 'aceptado') return;
+    lista[idx].estado = 'aceptado';
+    lista[idx].fechaAceptacion = Date.now();
+    _acuerdosGuardar(lista);
+    if (typeof toast === 'function') toast('✅ Acuerdo de confidencialidad firmado digitalmente.', 'success', 5000);
+    if (typeof _usdVerAcuerdoConfidencialidad === 'function') _usdVerAcuerdoConfidencialidad(window.userLogueado.usuario);
+}
+
+function _usdAbrirPDF(html, titulo) {
+    try {
+        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.target   = '_blank';
+        a.rel      = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        if(typeof toast==='function') toast('📄 '+titulo+' lista. Usa "Guardar como PDF".','success');
+    } catch(e) {
+        console.error('Error abriendo PDF:', e);
+        if(typeof toast==='function') toast('Error al generar el PDF. Intenta de nuevo.','error');
+    }
+}
+
+async function _usdVerContrato(usuario) {
+    const ref = (typeof usuarios !== 'undefined' && Array.isArray(usuarios) && usuarios.length) ? usuarios : (window._usuariosGlobal || []);
+    let u = ref.find(x => x.usuario === usuario);
+    if (!u && window.userLogueado && window.userLogueado.usuario === usuario) u = window.userLogueado;
+    if (!u) { if(typeof toast==='function') toast('No se encontró el usuario.','error'); return; }
+    const r = _contratoAsegurar(u);
+
+    const prev = document.getElementById('_modalVerContrato');
+    if (prev) prev.remove();
+
+    const esDestinatario = window.userLogueado && r.usuario === window.userLogueado.usuario;
+    const puedeFirmar    = esDestinatario && r.estado !== 'aceptado';
+    const puedeImprimir  = window.userLogueado && esRolCoord(window.userLogueado.rol);
+    const firmado        = r.estado === 'aceptado' || r.firmaFisica;
+
+    const htmlDoc = await _usdHTMLContrato(u, r, false);
+    const nombreU = (typeof _usdNombrePropio === 'function') ? _usdNombrePropio(u.nombre) : u.nombre;
+    const _estadoLbl = r.estado === 'aceptado' ? '✅ Firmado digitalmente' : r.firmaFisica ? '✅ Firmado en persona' : '🕒 Pendiente de firma';
+
+    const modal = document.createElement('div');
+    modal.id = '_modalVerContrato';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:100010;background:rgba(0,0,0,0.82);display:flex;align-items:center;justify-content:center;padding:16px;';
+    modal.innerHTML = `
+        <div style="background:#1a1a2e;border-radius:16px;border:1px solid rgba(255,255,255,0.12);width:100%;max-width:980px;height:94vh;max-height:94vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,0.7);">
+            <div style="padding:14px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,0.1);">
+                <span style="font-size:18px;">📃</span>
+                <div style="flex:1;font-size:13px;font-weight:800;color:#fff;">Contrato de Prestación de Servicios — ${_estadoLbl}</div>
+                <button onclick="document.getElementById('_modalVerContrato').remove()" style="background:rgba(255,255,255,0.1);border:none;color:#fff;width:30px;height:30px;border-radius:7px;cursor:pointer;font-size:15px;">✕</button>
+            </div>
+            <iframe srcdoc="${htmlDoc.replace(/"/g,'&quot;')}" style="flex:1;width:100%;border:none;background:#fff;min-height:0;"></iframe>
+            <div style="padding:14px 18px;border-top:1px solid rgba(255,255,255,0.1);display:flex;gap:10px;flex-wrap:wrap;">
+                ${puedeFirmar ? `<button onclick="if(confirm('¿Confirmas que leíste y aceptas el Contrato de Prestación de Servicios?')) usdFirmarContrato('${r.id}')" style="flex:1;min-width:220px;padding:12px;border-radius:10px;border:none;cursor:pointer;background:linear-gradient(135deg,#27ae60,#1e8449);color:#fff;font-weight:800;font-size:13px;">✅ Aceptar y firmar digitalmente</button>` : ''}
+                ${firmado ? `<button onclick="_usdAbrirPDF(document.querySelector('#_modalVerContrato iframe').srcdoc,'Contrato de Prestación de Servicios — ${nombreU}')" style="flex:1;min-width:180px;padding:12px;border-radius:10px;border:none;cursor:pointer;background:linear-gradient(135deg,#f1c40f,#e67e22);color:#1a1a1a;font-weight:800;font-size:13px;">⬇️ Descargar</button>` : ''}
+                ${puedeImprimir ? `<button onclick="usdImprimirContrato('${r.usuario}')" style="padding:12px 18px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);cursor:pointer;background:rgba(255,255,255,0.06);color:#fff;font-weight:700;font-size:12px;">🖨️ Imprimir (firma física)</button>` : ''}
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
+
+async function _usdVerAcuerdoConfidencialidad(usuario) {
+    const ref = (typeof usuarios !== 'undefined' && Array.isArray(usuarios) && usuarios.length) ? usuarios : (window._usuariosGlobal || []);
+    let u = ref.find(x => x.usuario === usuario);
+    if (!u && window.userLogueado && window.userLogueado.usuario === usuario) u = window.userLogueado;
+    if (!u) { if(typeof toast==='function') toast('No se encontró el usuario.','error'); return; }
+    const r = _acuerdoAsegurar(u);
+
+    const prev = document.getElementById('_modalVerAcuerdo');
+    if (prev) prev.remove();
+
+    const esDestinatario = window.userLogueado && r.usuario === window.userLogueado.usuario;
+    const puedeFirmar    = esDestinatario && r.estado !== 'aceptado';
+    const puedeImprimir  = window.userLogueado && esRolCoord(window.userLogueado.rol);
+    const firmado        = r.estado === 'aceptado' || r.firmaFisica;
+
+    const htmlDoc = await _usdHTMLAcuerdoConfidencialidad(u, r, false);
+    const nombreU = (typeof _usdNombrePropio === 'function') ? _usdNombrePropio(u.nombre) : u.nombre;
+    const _estadoLbl = r.estado === 'aceptado' ? '✅ Firmado digitalmente' : r.firmaFisica ? '✅ Firmado en persona' : '🕒 Pendiente de firma';
+
+    const modal = document.createElement('div');
+    modal.id = '_modalVerAcuerdo';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:100010;background:rgba(0,0,0,0.82);display:flex;align-items:center;justify-content:center;padding:16px;';
+    modal.innerHTML = `
+        <div style="background:#1a1a2e;border-radius:16px;border:1px solid rgba(255,255,255,0.12);width:100%;max-width:980px;height:94vh;max-height:94vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,0.7);">
+            <div style="padding:14px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,0.1);">
+                <span style="font-size:18px;">🔒</span>
+                <div style="flex:1;font-size:13px;font-weight:800;color:#fff;">Acuerdo de Confidencialidad y No Divulgación — ${_estadoLbl}</div>
+                <button onclick="document.getElementById('_modalVerAcuerdo').remove()" style="background:rgba(255,255,255,0.1);border:none;color:#fff;width:30px;height:30px;border-radius:7px;cursor:pointer;font-size:15px;">✕</button>
+            </div>
+            <iframe srcdoc="${htmlDoc.replace(/"/g,'&quot;')}" style="flex:1;width:100%;border:none;background:#fff;min-height:0;"></iframe>
+            <div style="padding:14px 18px;border-top:1px solid rgba(255,255,255,0.1);display:flex;gap:10px;flex-wrap:wrap;">
+                ${puedeFirmar ? `<button onclick="if(confirm('¿Confirmas que leíste y aceptas el Acuerdo de Confidencialidad y No Divulgación?')) usdFirmarAcuerdoConfidencialidad('${r.id}')" style="flex:1;min-width:220px;padding:12px;border-radius:10px;border:none;cursor:pointer;background:linear-gradient(135deg,#27ae60,#1e8449);color:#fff;font-weight:800;font-size:13px;">✅ Aceptar y firmar digitalmente</button>` : ''}
+                ${firmado ? `<button onclick="_usdAbrirPDF(document.querySelector('#_modalVerAcuerdo iframe').srcdoc,'Acuerdo de Confidencialidad — ${nombreU}')" style="flex:1;min-width:180px;padding:12px;border-radius:10px;border:none;cursor:pointer;background:linear-gradient(135deg,#f1c40f,#e67e22);color:#1a1a1a;font-weight:800;font-size:13px;">⬇️ Descargar</button>` : ''}
+                ${puedeImprimir ? `<button onclick="usdImprimirAcuerdoConfidencialidad('${r.usuario}')" style="padding:12px 18px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);cursor:pointer;background:rgba(255,255,255,0.06);color:#fff;font-weight:700;font-size:12px;">🖨️ Imprimir (firma física)</button>` : ''}
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
+
+
+// ── Adaptación para esta página: los datos viven en Firebase, no en localStorage ──
+window.toast = function(msg, tipo) { if (tipo === 'error') alert(msg); else console.log(msg); };
+window.esRolCoord = function() { return false; };
+const _CG_DOCS = { con:'usd_contratos', acu:'usd_acuerdos_confidencialidad' };
+async function _cgMezclarFB(clave, rec) {   // guarda solo el registro propio, sin pisar el de otros
+    try {
+        const { ref, runTransaction } = window._fbModules;
+        await runTransaction(ref(window._fbDb, 'sistema/' + clave), cur => {
+            const a = window._fbValToArray(cur), i = a.findIndex(x => x.usuario === rec.usuario);
+            if (i >= 0) a[i] = rec; else a.unshift(rec);
+            return a;
+        });
+    } catch(e) { console.warn('No se pudo sincronizar', clave, e); alert('No se pudo guardar. Revisa tu conexión e intenta de nuevo.'); }
+}
+function _cgGuardarPropio(clave, lista) {
+    localStorage.setItem(clave, JSON.stringify(lista));
+    const yo = window.userLogueado && window.userLogueado.usuario;
+    lista.filter(x => x.usuario === yo).forEach(r => _cgMezclarFB(clave, r));
+}
+_contratosGuardar = function(l) { _cgGuardarPropio(_CG_DOCS.con, l); };
+_acuerdosGuardar  = function(l) { _cgGuardarPropio(_CG_DOCS.acu, l); };
+// Trae de Firebase solo lo necesario del propio usuario (y de los representantes legales para el contrato)
+async function cgPrepararDocs() {
+    const yo = userLogueado.usuario, ids = [yo, ..._USD_REPRESENTANTES];
+    const norm = s => String(s||'').trim().toUpperCase();
+    const hv = (await window._fbCargar('hojas_vida_usd')) || {}, hvF = {};
+    ids.forEach(id => { if (hv[id]) hvF[id] = hv[id]; });
+    localStorage.setItem('hojas_vida_usd', JSON.stringify(hvF));
+    const nom = window._fbValToArray(await window._fbCargar('datos_nomina_usd'));
+    localStorage.setItem('datos_nomina_usd', JSON.stringify(nom.filter(r => ids.map(norm).includes(norm(r.login || r.usuario)))));
+    localStorage.setItem('usuarios_usd', JSON.stringify(usuarios.filter(u => ids.map(norm).includes(norm(u.usuario))).map(u => { const c = {...u}; delete c.password; return c; })));
+    localStorage.setItem(_CG_DOCS.con, JSON.stringify(window._fbValToArray(await window._fbCargar(_CG_DOCS.con)).filter(x => x.usuario === yo)));
+    localStorage.setItem(_CG_DOCS.acu, JSON.stringify(window._fbValToArray(await window._fbCargar(_CG_DOCS.acu)).filter(x => x.usuario === yo)));
+}
+function cgLimpiarDocs() { ['hojas_vida_usd','datos_nomina_usd','usuarios_usd',_CG_DOCS.con,_CG_DOCS.acu].forEach(k => localStorage.removeItem(k)); }
+
+window.addEventListener('load', _restaurarSesion);
+
+function cerrarSesion() {
+    clearTimeout(_cpInactividadTimer);
+    try { sessionStorage.removeItem(_SES_KEY); } catch(e) {}
+    if (window._cpListenerSesion) { try { window._cpListenerSesion(); } catch(e){} window._cpListenerSesion = null; }
+    if (_cpListenerActivo) { try { _cpListenerActivo(); } catch(e){} _cpListenerActivo = null; }
+    try { cgLimpiarDocs(); } catch(e) {}
+    userLogueado = null;
+    window.userLogueado = null;
+    _cpSlotPropio = null;
+    _cpSesionId = null;
+    _cpMensajesLocal = [];
+    document.getElementById('inputPassword').value = '';
+    document.getElementById('appScreen').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+}
+
+// ── Cierre de sesión automático por inactividad (10 min) ──
+// Detiene los listeners de Firebase al cerrar, así se deja de consumir cuota
+// de descarga mientras el candidato no esté usando el chat.
+const _CP_INACTIVIDAD_MS = 10 * 60 * 1000;
+let _cpInactividadTimer = null;
+function _cpReiniciarInactividad() {
+    if (!userLogueado) return;
+    _tocarSesionTab();
+    clearTimeout(_cpInactividadTimer);
+    _cpInactividadTimer = setTimeout(() => {
+        alert('Tu sesión se cerró por inactividad (10 min). Vuelve a ingresar.');
+        cerrarSesion();
+    }, _CP_INACTIVIDAD_MS);
+}
+['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach(evt => {
+    document.addEventListener(evt, _cpReiniciarInactividad, { passive: true });
+});
+
+// ══════════════════════════════════════════════════════════
+// CHAT PRUEBA — LADO CANDIDATO (idéntico al del sistema principal)
+// ══════════════════════════════════════════════════════════
+let _cpSlotPropio    = null; // 'prueba1' o 'prueba2'
+let _cpSesionId      = null;
+let _cpListenerActivo = null;
+let _cpMensajesLocal = [];
+let _cpNombreLocal   = '';
+
+function cpIniciarVista() {
+    if (!userLogueado) return;
+    cpRenderCandidato();
+}
+
+function cpRenderCandidato() {
+    const cont = document.getElementById('chatPruebaContenido');
+    if (!cont) return;
+
+    if (!_cpSlotPropio) {
+        _cpSlotPropio = userLogueado.usuario === 'PRUEBA.1' ? 'prueba1' : 'prueba2';
+    }
+
+    if (window._cpListenerSesion) { try { window._cpListenerSesion(); } catch(e){} window._cpListenerSesion = null; }
+    try {
+        const { getDatabase, ref, onValue } = window._fbModules || {};
+        if (onValue && getDatabase) {
+            const db = getDatabase();
+            window._cpListenerSesion = onValue(ref(db, 'sistema/usd_cp_sesion_activa'), (snap) => {
+                const sesion = snap.exists() ? snap.val() : null;
+                _cpProcesarSesionCandidato(sesion);
+            });
+            return;
+        }
+    } catch(e) {}
+    const _pollSesion = () => {
+        if (!document.getElementById('chatPruebaContenido')) return;
+        window._fbCargar('usd_cp_sesion_activa').then(sesion => {
+            _cpProcesarSesionCandidato(sesion);
+            if (!_cpSesionId) setTimeout(_pollSesion, 4000);
+        });
+    };
+    _pollSesion();
+}
+
+function _cpProcesarSesionCandidato(sesion) {
+    const cont = document.getElementById('chatPruebaContenido');
+    if (!cont) return;
+    if (!sesion || !sesion.id) {
+        if (_cpSesionId) {
+            _cpSesionId = null;
+            _cpMensajesLocal = [];
+            if (_cpListenerActivo) { try { _cpListenerActivo(); } catch(e){} _cpListenerActivo = null; }
+            cont.innerHTML = `
+                <div style="text-align:center;padding:60px 20px;">
+                    <div style="font-size:64px;margin-bottom:16px;">✅</div>
+                    <h2 style="margin:0 0 8px;">Sesión finalizada</h2>
+                    <p style="color:var(--textMuted);font-size:13px;">El formador ha cerrado esta sesión de prueba.<br>Espera a que inicie una nueva sesión.</p>
+                </div>`;
+            return;
+        }
+        cont.innerHTML = `
+                <div style="text-align:center;padding:60px 20px;">
+                    <div style="font-size:64px;margin-bottom:16px;">⏳</div>
+                    <h2 style="margin:0 0 8px;">Esperando sesión...</h2>
+                    <p style="color:var(--textMuted);font-size:13px;">El formador aún no ha iniciado una sesión de prueba.<br>Aparecerá automáticamente cuando comience.</p>
+                </div>`;
+        return;
+    }
+    if (_cpSesionId && _cpSesionId !== sesion.id) {
+        _cpMensajesLocal = [];
+        if (_cpListenerActivo) { try { _cpListenerActivo(); } catch(e){} _cpListenerActivo = null; }
+        _cpSesionId = null;
+    }
+    if (_cpSesionId === sesion.id && document.getElementById('cpMsgBox')) return;
+
+    _cpSesionId = sesion.id;
+    const datosYa = sesion[_cpSlotPropio];
+
+    if (!datosYa?.listo) {
+        cont.innerHTML = `
+        <div style="max-width:380px;margin:40px auto;">
+            <div class="glass-card" style="padding:28px;">
+                <div style="text-align:center;margin-bottom:20px;">
+                    <div style="font-size:52px;">📋</div>
+                    <h3 style="margin:8px 0 4px;">Antes de comenzar</h3>
+                    <p style="color:var(--textMuted);font-size:12px;">Ingresa tus datos para iniciar el chat de prueba.</p>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:11px;color:var(--textMuted);display:block;margin-bottom:5px;">Nombre completo</label>
+                    <input id="cpInputNombre" placeholder="Tu nombre completo" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 12px;color:#fff;font-size:13px;outline:none;">
+                </div>
+                <div style="margin-bottom:20px;">
+                    <label style="font-size:11px;color:var(--textMuted);display:block;margin-bottom:5px;">Número de cédula</label>
+                    <input id="cpInputCedula" placeholder="Ej: 1234567890" type="text" inputmode="numeric" style="width:100%;box-sizing:border-box;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 12px;color:#fff;font-size:13px;outline:none;">
+                </div>
+                <button onclick="cpRegistrarDatosCandidato()" style="width:100%;background:var(--accent);color:#fff;border:none;padding:12px;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 4px 16px rgba(255,45,85,0.35);">
+                    ✅ Iniciar Chat de Prueba
+                </button>
+            </div>
+        </div>`;
+    } else {
+        cpRenderChatCandidato(sesion);
+    }
+}
+
+function cpRegistrarDatosCandidato() {
+    const nombre = (document.getElementById('cpInputNombre')?.value || '').trim();
+    const cedula = (document.getElementById('cpInputCedula')?.value || '').trim();
+    if (!nombre || !cedula) { alert('Por favor ingresa tu nombre y cédula.'); return; }
+
+    _cpMensajesLocal = [];
+
+    window._fbCargar('usd_cp_sesion_activa').then(sesion => {
+        if (!sesion) return;
+        sesion[_cpSlotPropio] = { nombre, cedula, listo: true };
+        // Actualizar cédula en el registro del usuario de prueba (para que el formador
+        // pueda vincular la calificación). Se recarga la lista completa justo antes de
+        // guardar, para no pisar datos de otros usuarios con una copia desactualizada.
+        window._fbCargar('usuarios_usd').then(dataUsuarios => {
+            const listaCompleta = dataUsuarios ? window._fbValToArray(dataUsuarios) : usuarios;
+            const u = listaCompleta.find(x => x.usuario === userLogueado.usuario);
+            if (u) { u.cedula = cedula; u.nombre = nombre; }
+            if (window._fbGuardar) window._fbGuardar('usuarios_usd', listaCompleta);
+        });
+        if (window._fbGuardar) window._fbGuardar('usd_cp_sesion_activa', sesion);
+        cpMostrarIntroPrueba(sesion);
+    });
+}
+
+function cpMostrarIntroPrueba(sesion) {
+    const cont = document.getElementById('chatPruebaContenido');
+    if (!cont) return;
+
+    cont.innerHTML = `
+        <div style="max-width:480px;margin:24px auto;">
+            <div class="glass-card" style="padding:0;overflow:hidden;">
+                <div style="padding:20px 24px;border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(255,45,85,0.1);text-align:center;">
+                    <div style="font-size:40px;margin-bottom:8px;">📋</div>
+                    <h2 style="margin:0;font-size:16px;">Introducción a la Prueba USDINFORMATION</h2>
+                </div>
+                <div style="padding:22px 24px;max-height:55vh;overflow-y:auto;font-size:13px;line-height:1.6;color:rgba(255,255,255,0.9);">
+                    <p>¡Bienvenido(a)! 🎉 Ha llegado el momento de demostrar tus habilidades de comunicación, creatividad y capacidad para generar conversaciones naturales e interesantes. Durante esta prueba serás evaluado(a) en situaciones similares a las que encontrarás en el trabajo.</p>
+                    <p>Es importante que tengas presente que la mayor parte del público con el que interactuarás será de sexo masculino, por lo que se evaluará tu capacidad para adaptar la conversación a ese tipo de audiencia, manteniendo siempre una comunicación atractiva, natural y coherente.</p>
+
+                    <h3 style="margin:18px 0 10px;font-size:14px;color:#fff;">Criterios de evaluación</h3>
+                    <p><strong>1. Saludo llamativo (Rompehielos)</strong><br>
+                    Tu primer mensaje debe captar la atención del usuario desde el inicio. Se evaluará que el saludo sea original, atractivo y genere interés para continuar la conversación.</p>
+                    <p><strong>2. Fluidez de la conversación</strong><br>
+                    Se evaluará que cada respuesta tenga coherencia con el contexto de la conversación, manteniendo un diálogo natural, dinámico y agradable. Es importante evitar respuestas forzadas o que rompan el hilo de la interacción.</p>
+                    <p><strong>3. Creación de material</strong><br>
+                    Durante la conversación podrás enviar diferentes tipos de contenido, como imágenes o videos, siempre que sean apropiados y estén relacionados con el tema de la conversación. Se evaluará tu creatividad y la capacidad para utilizar estos recursos de forma estratégica y coherente.</p>
+
+                    <h3 style="margin:18px 0 10px;font-size:14px;color:#fff;">Calificación</h3>
+                    <p>La prueba será calificada sobre 100 puntos. La nota mínima de aprobación es de <strong>85 puntos</strong>. Una vez finalices la prueba, la persona encargada se comunicará contigo para informarte el resultado y brindarte la retroalimentación correspondiente.</p>
+
+                    <p>¡Muchos éxitos! Confía en tus habilidades, sé auténtico(a) y disfruta el proceso. Cada conversación es una oportunidad para demostrar tu talento. Da lo mejor de ti y recuerda que las grandes oportunidades comienzan con una excelente primera impresión.</p>
+                    <p style="text-align:center;font-weight:800;margin-top:18px;">¡Éxitos en tu prueba! 🚀</p>
+                </div>
+                <div style="padding:16px 24px;border-top:1px solid rgba(255,255,255,0.07);">
+                    <button onclick="cpConfirmarIntroPrueba()" style="width:100%;background:var(--accent);color:#fff;border:none;padding:13px;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 4px 16px rgba(255,45,85,0.35);">
+                        Continuar →
+                    </button>
+                </div>
+            </div>
+        </div>`;
+
+    window._cpSesionPendienteIntro = sesion;
+}
+
+function cpConfirmarIntroPrueba() {
+    const sesion = window._cpSesionPendienteIntro;
+    window._cpSesionPendienteIntro = null;
+    if (!sesion) return;
+    cpRenderChatCandidato(sesion);
+}
+
+function cpRenderChatCandidato(sesion) {
+    const cont = document.getElementById('chatPruebaContenido');
+    if (!cont || !sesion) return;
+    _cpSesionId  = sesion.id;
+    _cpNombreLocal = sesion[_cpSlotPropio]?.nombre || userLogueado.nombre;
+
+    cont.innerHTML = `
+        <div class="glass-card" style="padding:0;overflow:hidden;">
+            <div style="padding:14px 18px;border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(52,152,219,0.1);display:flex;align-items:center;gap:10px;">
+                <span style="font-size:22px;">🎓</span>
+                <div>
+                    <div style="font-size:13px;font-weight:800;">Chat de Evaluación</div>
+                    <div style="font-size:10px;color:var(--textMuted);">Hola, ${_cpNombreLocal}</div>
+                </div>
+            </div>
+            <div id="cpMsgBox" style="min-height:300px;max-height:380px;overflow-y:auto;padding:14px;">
+                <div style="text-align:center;color:rgba(255,255,255,0.2);font-size:12px;padding:30px;">Cargando mensajes...</div>
+            </div>
+            <div style="padding:10px 12px;border-top:1px solid rgba(255,255,255,0.07);display:flex;gap:8px;align-items:center;">
+                <input id="cpInputMsg" placeholder="Escribe tu respuesta..." onkeydown="if(event.key==='Enter')cpEnviarCandidato()"
+                    style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:9px;padding:9px 12px;color:#fff;font-size:13px;outline:none;">
+                <label for="cpImgCandidato" style="cursor:pointer;font-size:20px;opacity:0.7;transition:0.2s;" title="Adjuntar imagen" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">🖼️</label>
+                <input type="file" id="cpImgCandidato" accept="image/*" style="display:none;" onchange="cpAdjuntarImgCandidato(this)">
+                <button onclick="cpEnviarCandidato()" style="background:#3498db;color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:800;cursor:pointer;">➤</button>
+            </div>
+        </div>`;
+
+    _cpActivarListenerMensajes();
+}
+
+function _cpActivarListenerMensajes() {
+    if (!_cpSesionId || !window._fbCargar) return;
+    if (_cpListenerActivo) { try { _cpListenerActivo(); } catch(e){} _cpListenerActivo = null; }
+
+    try {
+        const { getDatabase, ref, onValue } = window._fbModules || {};
+        if (onValue && getDatabase) {
+            const db = getDatabase();
+            const unsubscribe = onValue(ref(db, 'sistema/usd_cp_mensajes_' + _cpSesionId), (snap) => {
+                const val = snap.exists() ? snap.val() : [];
+                _cpMensajesLocal = window._fbValToArray ? window._fbValToArray(val) : (Array.isArray(val) ? val : []);
+                const filtrados = _cpMensajesLocal.filter(m => m.canal === _cpSlotPropio || m.canal === 'todos' || m.de === _cpSlotPropio);
+                _cpRenderMensajes(filtrados);
+            });
+            _cpListenerActivo = unsubscribe;
+            return;
+        }
+    } catch(e) {}
+
+    _cpMensajesLocal = [];
+    const _pollMsgs = () => {
+        if (!_cpSesionId || document.getElementById('cpMsgBox') === null) return;
+        window._fbCargar('usd_cp_mensajes_' + _cpSesionId).then(msgs => {
+            _cpMensajesLocal = Array.isArray(msgs) ? msgs : [];
+            const filtrados = _cpMensajesLocal.filter(m => m.canal === _cpSlotPropio || m.canal === 'todos' || m.de === _cpSlotPropio);
+            _cpRenderMensajes(filtrados);
+            _cpListenerActivo = setTimeout(_pollMsgs, 3000);
+        });
+    };
+    _pollMsgs();
+}
+
+function cpEnviarCandidato() {
+    const input = document.getElementById('cpInputMsg');
+    const texto = (input?.value || '').trim();
+    if (!texto || !_cpSesionId) return;
+    input.value = '';
+    const msg = { de: _cpSlotPropio, nombreDe: _cpNombreLocal, canal: _cpSlotPropio, texto, ts: Date.now() };
+    _cpMensajesLocal.push(msg);
+    const filtrados = _cpMensajesLocal.filter(m => m.canal === _cpSlotPropio || m.canal === 'todos' || m.de === _cpSlotPropio);
+    _cpRenderMensajes(filtrados);
+    if (window._fbGuardar) window._fbGuardar('usd_cp_mensajes_' + _cpSesionId, _cpMensajesLocal);
+}
+
+function _cpComprimirImagen(dataUrl, callback) {
+    const MAX_BYTES = 80 * 1024;
+    const img = new Image();
+    img.onload = function() {
+        let w = img.width, h = img.height;
+        const MAX_DIM = 800;
+        if (w > MAX_DIM || h > MAX_DIM) {
+            if (w > h) { h = Math.round(h * MAX_DIM / w); w = MAX_DIM; }
+            else       { w = Math.round(w * MAX_DIM / h); h = MAX_DIM; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        let quality = 0.75;
+        let result = canvas.toDataURL('image/jpeg', quality);
+        while (result.length > MAX_BYTES && quality > 0.1) {
+            quality -= 0.08;
+            if (quality < 0.4 && (w > 400 || h > 400)) {
+                w = Math.round(w * 0.8); h = Math.round(h * 0.8);
+                canvas.width = w; canvas.height = h;
+                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                quality = 0.6;
+            }
+            result = canvas.toDataURL('image/jpeg', quality);
+        }
+        callback(result);
+    };
+    img.onerror = () => callback(dataUrl);
+    img.src = dataUrl;
+}
+
+function cpAdjuntarImgCandidato(input) {
+    const file = input.files[0];
+    if (!file || !_cpSesionId) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        _cpComprimirImagen(e.target.result, (comprimido) => {
+            const _subir = (window._fbSubirFoto)
+                ? window._fbSubirFoto(comprimido, `cp_adjuntos/${Date.now()}_${Math.random().toString(36).slice(2,8)}.jpg`)
+                : Promise.resolve(null);
+            _subir.then(url => {
+                const msg = { de: _cpSlotPropio, nombreDe: _cpNombreLocal, canal: _cpSlotPropio, texto: '📷 Imagen adjunta', img: url || comprimido, ts: Date.now() };
+                _cpMensajesLocal.push(msg);
+                const filtrados = _cpMensajesLocal.filter(m => m.canal === _cpSlotPropio || m.canal === 'todos' || m.de === _cpSlotPropio);
+                _cpRenderMensajes(filtrados);
+                if (window._fbGuardar) window._fbGuardar('usd_cp_mensajes_' + _cpSesionId, _cpMensajesLocal);
+            });
+        });
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
+}
+
+function _cpRenderMensajes(filtrados) {
+    const box = document.getElementById('cpMsgBox');
+    if (!box) return;
+    box.innerHTML = filtrados.length
+        ? filtrados.map(m => {
+            const esPropio = m.de === _cpSlotPropio;
+            const imgHTML  = m.img ? `<img src="${m.img}" style="max-width:200px;border-radius:8px;display:block;margin-top:4px;">` : '';
+            return `<div style="display:flex;flex-direction:column;align-items:${esPropio?'flex-end':'flex-start'};margin-bottom:8px;">
+                <div style="background:${esPropio?'rgba(52,152,219,0.25)':'rgba(255,255,255,0.07)'};border-radius:10px;padding:9px 13px;max-width:80%;font-size:13px;">
+                    ${m.texto}${imgHTML}
+                </div>
+            </div>`;
+        }).join('')
+        : `<div style="text-align:center;color:rgba(255,255,255,0.2);font-size:12px;padding:30px;">Esperando mensajes del formador...</div>`;
+    box.scrollTop = box.scrollHeight;
+}
+
+// Permitir Enter en el formulario de login
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('inputPassword').addEventListener('keydown', e => { if (e.key === 'Enter') intentarLogin(); });
+    document.getElementById('inputUsuario').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('inputPassword').focus(); });
+});
+</script>
+</body>
+</html>
